@@ -1,0 +1,40 @@
+@font-face {
+  font-family: "EB Garamond";
+  src: url("assets/fonts/eb-garamond-regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+.brand,
+.foot .brand {
+  color: var(--green);
+  font-family: "EB Garamond", Baskerville, Georgia, serif;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -.035em;
+  font-kerning: normal;
+  gap: .23em;
+}
+
+.mast .brand { font-size: clamp(32px, 2.55vw, 41px); }
+.foot .brand { font-size: 29px; }
+.brand em {
+  font-family: Baskerville, "Iowan Old Style", Georgia, serif;
+  font-size: .89em;
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: -.045em;
+}
+
+.brand img {
+  width: 1.05em;
+  height: 1.05em;
+}
+
+@media (max-width: 480px) {
+  .mast .brand { font-size: clamp(28px, 7.2vw, 33px); }
+  .mast .brand img { display: none; }
+  .brand-demo { padding-inline-start: 1px; }
+}
