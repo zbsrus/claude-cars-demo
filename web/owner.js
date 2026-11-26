@@ -33,9 +33,14 @@
   let routeSequence = 0;
   let savedCurrent = false;
   let activeUrl = location.href;
+  let siteRecovery = null;
 
   function urlFor(query = {}) {
     const url = new URL(ownerURL);
+    if (["edit", "published", "share"].includes(query.tab)) {
+      const search = new URL(location.href).searchParams.get("q");
+      if (search) url.searchParams.set("q", search);
+    }
     for (const [key, value] of Object.entries(query)) if (value) url.searchParams.set(key, value);
     return url.pathname + url.search;
   }
@@ -82,12 +87,18 @@
       }
     }
     let res;
+    let payload;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), file ? 180000 : 30000);
+    opts.signal = controller.signal;
     try {
       res = await fetch(path, opts);
+      payload = await res.json();
     } catch {
       throw new Error("network");
+    } finally {
+      clearTimeout(timeout);
     }
-    const payload = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (path !== "/api/login" && (res.status === 401 || res.status === 403)) {
         const prompt = main.querySelector("#ow-reconnect");
@@ -111,7 +122,10 @@
                 : res.status === 413 || payload.error === "media" || file
                   ? "mediaError"
                   : "failure";
-      throw new Error(key);
+      const error = new Error(key);
+      error.status = res.status;
+      if (typeof payload.field === "string") error.field = payload.field;
+      throw error;
     }
     return payload;
   }
@@ -122,7 +136,7 @@
     region.textContent = key ? t(key) : "";
   }
   function errorMessage(error) {
-    notice(error.message, true);
+    notice(t(error.message) === error.message ? "failure" : error.message, true);
   }
   function currentCar(id) {
     return cars.find((car) => car.id === id);
@@ -181,8 +195,18 @@
       )
       .join("");
   }
+  function focusSelect(selector) {
+    const field = panel.querySelector(selector);
+    if (window.CCSelect) window.CCSelect.focus(field);
+    else field.focus();
+  }
   function listFilter(car) {
-    return ["draft", "sold"].includes(car.status) ? { filter: car.status } : {};
+    const params = new URL(location.href).searchParams;
+    const filter = !car.id ? params.get("filter") : car.archived ? "archived" : car.status;
+    return {
+      filter: ["draft", "sold", "archived"].includes(filter) ? filter : "",
+      q: params.get("q") || "",
+    };
   }
   function buttonsFor(car, compact = false) {
     if (!car || car.status === "draft") return "";
@@ -205,8 +229,9 @@
   function frame(active) {
     const nav = [
       ["list", "catalogue"],
-      ["stats", "stats"],
       ["enquiries", "enquiries"],
+      ["site", "site"],
+      ["stats", "stats"],
     ]
       .map(([tab, key]) => {
         const selected = tab === active;
@@ -272,6 +297,9 @@
         text: state.value,
       };
     try {
+      if (query.get("tab") === "site" && siteRecovery) {
+        data = { tab: "site", section: query.get("section") || "", values: siteRecovery() };
+      }
       if (data) sessionStorage.setItem(draftStore, JSON.stringify(data));
       return true;
     } catch {
@@ -297,27 +325,53 @@
     }
   }
   function renderList(params) {
-    const filter = ["draft", "sold"].includes(params.get("filter")) ? params.get("filter") : "public";
+    const filter = ["draft", "sold", "archived"].includes(params.get("filter")) ? params.get("filter") : "public";
     const groups = {
       public: cars.filter((c) => c.status !== "draft" && c.status !== "sold"),
       sold: cars.filter((c) => c.status === "sold"),
-      draft: cars.filter((c) => c.status === "draft"),
+      draft: cars.filter((c) => c.status === "draft" && !c.archived),
+      archived: cars.filter((c) => c.status === "draft" && c.archived),
     };
     const add = `${symbol("plus")}<span>${t("added")}</span>`;
-    const addLink = `<a data-owner-route class="ow-btn ow-primary" href="${urlFor({ tab: "edit" })}">${add}</a>`;
-    const sectionNav = ["public", "draft", "sold"]
-      .map(
-        (key) =>
-          `<a class="ow-tab" data-owner-route href="${urlFor(key === "public" ? {} : { filter: key })}"${filter === key ? ' aria-current="page"' : ""}>${t(key === "public" ? "published" : key === "sold" ? "archive" : "drafts")} <span>${groups[key].length}</span></a>`,
-      )
-      .join("");
-    const rows = groups[filter]
-      .map((car) => {
+    const addQuery = { tab: "edit", filter: filter === "public" ? "" : filter };
+    const addLink = `<a data-owner-route class="ow-btn ow-primary" href="${esc(urlFor(addQuery))}">${add}</a>`;
+    const initialQuery = (params.get("q") || "").slice(0, 100);
+    const searchField = cars.length > 1 || initialQuery
+      ? `<div class="ow-search"><label for="ow-search">${t("searchListings")}</label><div><input type="search" id="ow-search" name="q" value="${esc(initialQuery)}" maxlength="100" autocomplete="off" aria-controls="ow-list-rows"><button type="button" data-clear-search class="ow-link">${t("clearSearch")}</button></div></div>` : "";
+    panel.innerHTML = `${top(t("listingsTitle"), addLink)}${searchField}<div class="ow-tabs" id="ow-list-filters"></div>${banner()}<div id="ow-list-rows"></div>`;
+    const normalize = (value) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const input = panel.querySelector("#ow-search");
+    const reset = panel.querySelector("[data-clear-search]");
+    function show(query) {
+      const terms = normalize(query.trim()).split(/\s+/).filter(Boolean);
+      const result = {};
+      for (const [key, group] of Object.entries(groups)) {
+        result[key] = group.filter(car => {
+          const searchable = normalize([car.make, car.model, car.year, t(car.archived ? "privatelyArchived" : car.status)].join(" "));
+          return terms.every(term => searchable.includes(term));
+        });
+      }
+      const groupsLabels = {public: "published", draft: "drafts", sold: "soldPlural", archived: "privateArchive"};
+      panel.querySelector("#ow-list-filters").innerHTML = Object.keys(groupsLabels).map(key =>
+        `<a class="ow-tab" data-owner-route href="${esc(urlFor({ filter: key === "public" ? "" : key, q: query }))}"${filter === key ? ' aria-current="page"' : ""}>${t(groupsLabels[key])} <span>${result[key].length}</span></a>`
+      ).join("");
+      const rows = result[filter].map(car => {
         const title = [car.make, car.model].filter(Boolean).join(" ");
-        return `<article class="ow-row"><div class="ow-row-media">${car.cover ? `<img alt="" src="${esc(car.cover)}" loading="lazy" width="140" height="105">` : ""}</div><div class="ow-row-main"><span class="ow-status">${t(car.status)}</span><h2>${esc(title)}</h2><p class="ow-muted">${esc(compactDetails(car))}</p>${buttonsFor(car, true)}</div>${routeLink({ tab: "edit", car: car.id }, t("edit"), "ow-btn ow-edit")}</article>`;
-      })
-      .join("");
-    panel.innerHTML = `${top(t("listingsTitle"), addLink)}<div class="ow-tabs">${sectionNav}</div>${banner()}${rows || `<p class="ow-empty">${t(filter === "public" ? "nonePublic" : filter === "sold" ? "noneSold" : "noneDrafts")}</p>`}`;
+        return `<article class="ow-row"><div class="ow-row-media">${car.cover ? `<img alt="" src="${esc(car.cover)}" loading="lazy" width="140" height="105">` : ""}</div><div class="ow-row-main"><span class="ow-status">${t(car.archived ? "privatelyArchived" : car.status)}</span><h2>${esc(title)}</h2><p class="ow-muted">${esc(compactDetails(car))}</p>${buttonsFor(car, true)}</div>${routeLink({ tab: "edit", car: car.id }, t("edit"), "ow-btn ow-edit")}</article>`;
+      }).join("");
+      const empty = terms.length ? "noSearchResults" : ({public: "nonePublic", sold: "noneSold", draft: "noneDrafts", archived: "noneArchived"})[filter];
+      panel.querySelector("#ow-list-rows").innerHTML = rows || `<p class="ow-empty" role="status">${t(empty)}</p>`;
+      panel.querySelector(".ow-top a").href = urlFor(addQuery);
+      if (reset) reset.hidden = !query;
+    }
+    function search() {
+      history.replaceState({}, "", urlFor({ filter: filter === "public" ? "" : filter, q: input.value }));
+      syncLanguageLinks();
+      show(input.value);
+    }
+    input?.addEventListener("input", search);
+    reset?.addEventListener("click", () => { input.value = ""; search(); input.focus(); });
+    show(initialQuery);
   }
 
   function initEditor(params) {
@@ -330,19 +384,30 @@
     editor = {
       original: structuredClone(original),
       car: structuredClone(original),
-      section: "details",
-      language: "fr",
+      section: ["story", "media"].includes(params.get("step")) ? params.get("step") : "details",
+      language: languages.includes(params.get("copyLang")) ? params.get("copyLang") : "fr",
       selectedStatus: original.status === "draft" ? original.draftStatus || "available" : original.status,
     };
     editor.car.photos ||= [];
     editor.car.translations ||= {};
     editor.car.approved ||= {};
     const recovery = readRecovery();
-    if (recovery?.tab === "edit" && recovery.car === (id || "") && recovery.revision === original.revision) {
+    if (recovery?.tab === "edit" && recovery.car === (id || "") && recovery.editor?.car) {
       editor = recovery.editor;
+      editor.conflict = recovery.revision !== original.revision;
       dirty = true;
     }
     printEditor();
+    if (dirty && !editor.conflict) notice("recovered");
+  }
+  function syncEditorLocation() {
+    const url = new URL(location.href);
+    if (editor.section === "details") url.searchParams.delete("step");
+    else url.searchParams.set("step", editor.section);
+    if (editor.language === "fr") url.searchParams.delete("copyLang");
+    else url.searchParams.set("copyLang", editor.language);
+    history.replaceState({}, "", url);
+    syncLanguageLinks();
   }
 
   const examples = {
@@ -444,8 +509,13 @@
     return `<div class="ow-media"><div class="ow-photo-intake"><div><label class="ow-uploader" for="ow-photos">${symbol("plus")}<span>${t("addPhotos")}<small>${t("photoHelp")}</small></span><input id="ow-photos" type="file" accept="image/jpeg,image/png,image/webp" multiple aria-describedby="ow-photo-guide ow-error-cover" ${editor.errors?.cover ? 'aria-invalid="true"' : ""}></label>${fieldError("cover")}
         <ul class="ow-photo-guide" id="ow-photo-guide"><li>${t("photoFraming")}</li><li>${t("photoPortrait")}</li><li>${t("photoHeic")}</li></ul></div>${preview}</div>
       <ol class="ow-photos">${images}</ol>
+      ${editor.removed?.kind === "photo" ? undoMedia() : ""}
       <label class="ow-uploader">${symbol("plus")}<span>${t(car.video ? "replaceVideo" : "addVideo")}<small>${t("videoHelp")}</small></span><input id="ow-video" type="file" accept="video/mp4,video/webm"></label>
-      ${car.video ? `<div class="ow-film"><video src="${esc(car.video)}" controls preload="metadata" playsinline></video><button type="button" data-action="remove-video" class="ow-small">${t("remove")}</button></div>` : ""}</div>`;
+      ${car.video ? `<div class="ow-film"><video src="${esc(car.video)}" controls preload="metadata" playsinline></video><button type="button" data-action="remove-video" class="ow-small">${t("remove")}</button></div>` : ""}
+      ${editor.removed?.kind === "video" ? undoMedia() : ""}</div>`;
+  }
+  function undoMedia() {
+    return `<div class="ow-undo"><span role="status">${t(editor.removed.kind === "photo" ? "photoRemoved" : "videoRemoved")}</span><button type="button" class="ow-link" data-action="undo-media">${t("undo")}</button></div>`;
   }
   function printEditor() {
     const car = editor.car;
@@ -463,13 +533,19 @@
           ? storyInputs()
           : mediaInputs();
     const publishedActions = isDraft ? "" : buttonsFor(editor.original);
-    const contextLine = car.id ? `<p class="ow-editor-context">${esc([editor.original.make, editor.original.model].join(" "))} · ${t(editor.original.status)}</p>` : "";
-    const saved = savedCurrent ? `<p class="ow-notice" role="status">${t(savedCurrent === "withdrawn" ? "withdrawn" : "saved")}</p>` : "";
-    panel.innerHTML = `${top(t(car.id ? "editListing" : "added"))}${contextLine}${saved}
-      <div class="ow-tabs ow-editor-tabs">${tabs}</div>${isDraft && editor.section === "details" ? `<p class="ow-draft-help">${t("draftHelp")}</p>` : ""}<form id="ow-editor" novalidate>${body}${banner()}
-      <div class="ow-submit">${isDraft ? `<button type="submit" value="draft" class="ow-btn">${t("saveDraft")}</button>` : ""}<button type="submit" value="public" class="ow-btn ow-primary">${t(isDraft ? "publish" : "save")}</button>${routeLink(listFilter(editor.original), t("cancel"), "ow-link")}${isDraft ? "" : `<button type="submit" value="withdraw" class="ow-link ow-withdraw">${t("withdraw")}</button>`}</div>
+    const archived = Boolean(editor.original.archived);
+    const contextLine = car.id ? `<p class="ow-editor-context">${esc([editor.original.make, editor.original.model].join(" "))} · ${t(archived ? "privatelyArchived" : editor.original.status)}</p>` : "";
+    const saved = savedCurrent ? `<p class="ow-notice" role="status">${t(["archivedNotice", "withdrawn"].includes(savedCurrent) ? savedCurrent : "saved")}</p>` : "";
+    const conflict = editor.conflict ? `<div class="ow-alert" role="status"><p>${t("recoveredConflict")}</p><a class="ow-link" href="${esc(location.href)}" target="_blank" rel="noopener">${t("latestInTab")}</a></div>` : "";
+    panel.innerHTML = `${top(t(car.id ? "editListing" : "added"))}${contextLine}${saved}${conflict}
+      <div class="ow-tabs ow-editor-tabs">${tabs}</div>${isDraft && editor.section === "details" ? `<p class="ow-draft-help">${t(archived ? "archiveHelp" : "draftHelp")}</p>` : ""}<form id="ow-editor" novalidate>${body}${banner()}
+      <div class="ow-submit">${isDraft ? `<button type="submit" value="draft" class="ow-btn">${t(archived ? "save" : "saveDraft")}</button>` : ""}<button type="submit" value="public" class="ow-btn ow-primary">${t(archived ? "restorePublic" : isDraft ? "publish" : "save")}</button>${routeLink(listFilter(editor.original), t("cancel"), "ow-link")}</div>
+      ${car.id && !archived ? `<div class="ow-visibility">${!isDraft ? `<button type="submit" value="withdraw" class="ow-link">${t("withdraw")}</button>` : ""}<button type="submit" value="archive" class="ow-link">${t("privateArchiveAction")}</button></div>` : ""}
       </form>${publishedActions ? `<div class="ow-existing-share">${publishedActions}</div>` : ""}`;
     bindDirectory();
+    if (editor.conflict) {
+      for (const btn of panel.querySelectorAll('button[type="submit"]')) btn.disabled = true;
+    }
   }
   function editInput(target) {
     if (!editor) return;
@@ -544,6 +620,7 @@
     const key = Object.keys(errors)[0];
     if (!key) return true;
     editor.section = key === "cover" ? "media" : "details";
+    syncEditorLocation();
     printEditor();
     const field = panel.querySelector(key === "cover" ? "#ow-photos" : `[name=${key}]`);
     field?.focus();
@@ -566,11 +643,11 @@
       }
     for (const btn of panel.querySelectorAll("[data-edit-step]")) btn.disabled = disabled;
   }
-  async function saveCar(isDraft) {
-    if (busy || !valid(isDraft)) return;
+  async function saveCar(action) {
+    const isDraft = action !== "public";
+    if (busy || editor.conflict || !valid(isDraft)) return;
     busy = true;
     disableForm(true);
-    const action = isDraft ? (editor.original.status === "draft" ? "draft" : "withdraw") : "public";
     const activeButton = panel.querySelector(`[value="${action}"]`);
     const initialLabel = activeButton?.textContent;
     if (activeButton)
@@ -578,6 +655,8 @@
     panel.querySelector("form")?.setAttribute("aria-busy", "true");
     const payload = structuredClone(editor.car);
     payload.status = isDraft ? "draft" : editor.selectedStatus;
+    if (action === "archive") payload.archived = true;
+    if (!isDraft) delete payload.archived;
     if (isDraft) payload.draftStatus = editor.selectedStatus;
     else delete payload.draftStatus;
     for (const key of ["year", "km", "price"]) {
@@ -593,13 +672,17 @@
       cars = [car, ...cars.filter((c) => c.id !== car.id)];
       dirty = false;
       clearRecovery();
-      savedCurrent = isDraft && editor.original.status !== "draft" ? "withdrawn" :
+      savedCurrent = action === "archive" ? "archivedNotice" : isDraft && editor.original.status !== "draft" ? "withdrawn" :
         editor.original.status === "draft" ? "created" : "updated";
-      navigate(urlFor(isDraft ? { tab: "edit", car: car.id } : { tab: "published", car: car.id }), {
+      navigate(urlFor(isDraft ? { tab: "edit", car: car.id, step: editor.section !== "details" ? editor.section : "", copyLang: editor.language !== "fr" ? editor.language : "" } : { tab: "published", car: car.id }), {
         replace: true,
       });
     } catch (err) {
-      errorMessage(err);
+      if (err.message === "conflict" && editor.car.id) {
+        editor.conflict = true;
+        printEditor();
+        panel.querySelector(".ow-alert a").focus();
+      } else errorMessage(err);
     } finally {
       busy = false;
       if (editor) disableForm(false);
@@ -631,6 +714,7 @@
     try {
       for (const file of files) {
         const { url } = await api("/api/owner/media", "POST", file, true);
+        delete editor.removed;
         if (isVideo) editor.car.video = url;
         else {
           if (!editor.car.photos.includes(url)) editor.car.photos.push(url);
@@ -653,12 +737,14 @@
     const car = editor.car;
     const url = car.photos[index];
     if (!url) return;
+    delete editor.removed;
     let target = index;
     if (button.dataset.photoOp === "cover") car.cover = url;
     if (button.dataset.photoOp === "up" && index > 0) target = index - 1;
     if (button.dataset.photoOp === "down" && index < car.photos.length - 1) target = index + 1;
     if (target !== index) [car.photos[index], car.photos[target]] = [car.photos[target], car.photos[index]];
     if (button.dataset.photoOp === "remove") {
+      editor.removed = {kind: "photo", url, index, cover: car.cover};
       car.photos.splice(index, 1);
       if (car.cover === url) car.cover = car.photos[0] || "";
       target = Math.min(index, car.photos.length - 1);
@@ -666,6 +752,8 @@
     dirty = true;
     printEditor();
     const focusTarget =
+      panel.querySelector('[data-action="undo-media"]') ||
+      panel.querySelector(`[data-photo-op="${button.dataset.photoOp}"][data-index="${target}"]:not(:disabled)`) ||
       panel.querySelector(`[data-photo-op][data-index="${target}"]:not(:disabled)`) ||
       panel.querySelector("#ow-photos");
     focusTarget?.focus();
@@ -722,6 +810,7 @@
       dirty = true;
     }
     printShare();
+    if (dirty) notice("recovered");
   }
   function selectCaption() {
     const saved = state.shares?.[state.channel]?.[state.language];
@@ -799,7 +888,7 @@
       syncLanguageLinks();
       selectCaption();
       printShare();
-      panel.querySelector(`[data-share-setting="${key}"]`)?.focus();
+      focusSelect(`[data-share-setting="${key}"]`);
     } catch (err) {
       target.value = state[key];
       errorMessage(err);
@@ -884,7 +973,8 @@
     const tab = params.get("tab") || "list";
     editor = null;
     state = null;
-    frame(["stats", "enquiries"].includes(tab) ? tab : "list");
+    siteRecovery = null;
+    frame(["stats", "enquiries", "site"].includes(tab) ? tab : "list");
     panel.innerHTML = `<p role="status">${t("loading")}</p>`;
     try {
       const result = await api("/api/owner/cars");
@@ -893,6 +983,21 @@
       context.cars = cars.filter((car) => car.status !== "draft");
       if (tab === "stats" || tab === "enquiries") {
         await window.CCInsights.renderOwner(panel, tab, api);
+      } else if (tab === "site") {
+        const pending = readRecovery();
+        const isCurrent = () => sequence === routeSequence;
+        await window.CCOwnerSite.render({
+          panel, params, api, cars, urlFor, t, lang, isCurrent,
+          recovery: pending?.tab === "site" && pending.section === (params.get("section") || "") ? pending.values : null,
+          setRecovery(reader) { if (isCurrent()) siteRecovery = reader; },
+          setDirty(value) {
+            if (!isCurrent()) return;
+            dirty = Boolean(value);
+            if (!dirty) clearRecovery();
+          },
+          setBusy(value) { if (isCurrent()) busy = Boolean(value); },
+          navigate(url, options) { if (isCurrent()) navigate(url, { discard: true, ...options }); },
+        });
       } else if (tab === "edit") {
         initEditor(params);
         savedCurrent = false;
@@ -935,6 +1040,7 @@
     if (busy) return;
     if (target.dataset.editStep) {
       editor.section = target.dataset.editStep;
+      syncEditorLocation();
       printEditor();
       panel.querySelector(`[data-edit-step="${editor.section}"]`).focus();
       return;
@@ -956,6 +1062,7 @@
       api("/api/logout", "POST", {})
         .then(() => {
           clearRecovery();
+          window.CCInsights?.clearManualDraft?.();
           dirty = false;
           location.assign(ownerURL);
         })
@@ -965,10 +1072,21 @@
         });
     }
     if (action === "remove-video") {
+      editor.removed = {kind: "video", url: editor.car.video};
       editor.car.video = "";
       dirty = true;
       printEditor();
-      panel.querySelector("#ow-video").focus();
+      panel.querySelector('[data-action="undo-media"]').focus();
+    }
+    if (action === "undo-media" && editor?.removed) {
+      const removed = editor.removed;
+      if (removed.kind === "photo") {
+        editor.car.photos.splice(removed.index, 0, removed.url);
+        editor.car.cover = removed.cover;
+      } else editor.car.video = removed.url;
+      delete editor.removed;
+      printEditor();
+      panel.querySelector(removed.kind === "photo" ? `[data-photo-op="remove"][data-index="${removed.index}"]` : '[data-action="remove-video"]').focus();
     }
     if (action === "retry") renderRoute();
     if (action === "save-caption") {
@@ -1016,7 +1134,8 @@
       event.preventDefault();
       const intent = event.submitter?.value || (editor.original.status === "draft" ? "draft" : "public");
       if (intent === "withdraw" && !confirm(t("confirmWithdraw"))) return;
-      saveCar(intent !== "public");
+      if (intent === "archive" && !confirm(t("confirmArchive"))) return;
+      saveCar(intent);
     }
   });
   main.addEventListener("input", (event) => {
@@ -1038,8 +1157,9 @@
     const target = event.target;
     if (target.matches("[data-edit-language]")) {
       editor.language = target.value;
+      syncEditorLocation();
       printEditor();
-      panel.querySelector("[data-edit-language]").focus();
+      focusSelect("[data-edit-language]");
     }
     if (target.matches("[data-share-setting]")) switchShareSetting(target);
     if (target.id === "ow-photos" || target.id === "ow-video") uploadFiles(target);
@@ -1057,9 +1177,13 @@
   });
   window.addEventListener("beforeunload", (event) => {
     if (!canLeave && (dirty || busy)) {
+      writeRecovery();
       event.preventDefault();
       event.returnValue = "";
     }
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") writeRecovery();
   });
   window.addEventListener("popstate", () => {
     if (!leave()) {

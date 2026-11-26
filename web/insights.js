@@ -486,44 +486,64 @@
     for (const [key, value] of Object.entries(params)) if (value) u.searchParams.set(key, value);
     return u.pathname + u.search;
   };
-  function report(data, period, carId) {
+  const emptyCounts = () => Object.fromEntries(metricKeys.map(key => [key, 0]));
+  const dateLabel = new Intl.DateTimeFormat(locale, {timeZone: 'UTC', day:'numeric', month:'short', year:'numeric'});
+  const rangeLabel = (first, last) => dateLabel.format(asDay(first)) + ' – ' + dateLabel.format(asDay(last));
+  function report(data, period, carId, metric) {
     const today = dayNumber(dateKey(Date.now()));
     const first = period === 'all' ? -Infinity : today - Number(period) + 1;
-    const leads = data.leads.filter((lead) => {
+    const previousStart = period === 'all' ? -Infinity : first - Number(period);
+    const leads = data.leads.filter(lead => {
       const day = dayNumber(dateKey(lead.time));
       return (!carId || lead.car === carId) && day >= first && day <= today;
     });
-    const counts = {visits: 0, views: 0, whatsapp: 0, phone: 0, saved: 0, bookings: 0};
-    const days = {};
-    const sources = new Map();
-    let earliest = today;
+    const counts = emptyCounts(), previous = emptyCounts(), days = {};
+    const sources = new Map(), byCar = new Map();
+    let earliest = today, firstObserved = Infinity;
+    const firstForMetric = {};
     for (const row of data.metrics) {
       const day = dayNumber(row.day);
-      if ((carId && row.car !== carId) || day < first || day > today) continue;
-      earliest = Math.min(earliest, day);
+      firstObserved = Math.min(firstObserved, day);
       const key = row.kind === 'visit' ? 'visits' : row.kind === 'view' ? 'views' : row.kind;
       if (!Object.hasOwn(counts, key)) continue;
+      firstForMetric[key] = Math.min(firstForMetric[key] ?? Infinity, day);
+      if ((carId && row.car !== carId) || day > today) continue;
+      if (day < first) {
+        if (day >= previousStart) previous[key] += row.count;
+        continue;
+      }
+      earliest = Math.min(earliest, day);
       counts[key] += row.count;
-      if (key === 'views') days[day] = (days[day] || 0) + row.count;
-      if (key === 'visits' || key === 'views') {
-        const from = sources.get(row.source) || {visits: 0, views: 0};
-        from[key] += row.count;
-        sources.set(row.source, from);
+      if (key === metric) days[day] = (days[day] || 0) + row.count;
+      const source = sources.get(row.source) || emptyCounts();
+      source[key] += row.count;
+      sources.set(row.source, source);
+      if (row.car) {
+        const car = byCar.get(row.car) || emptyCounts();
+        car[key] += row.count;
+        byCar.set(row.car, car);
       }
     }
-    return {counts, days, sources, start: period === 'all' ? earliest : first, end: today, leads};
+    return {counts, days, sources, byCar, start:period === 'all' ? earliest : first, end:today, leads,
+      previous, previousStart, firstForMetric, comparable:period !== 'all' && firstObserved <= previousStart};
   }
   function sourceTable(sources) {
     if (!sources.size) return `<p>${t.noSources}</p>`;
-    const labels = {facebook: 'Facebook', whatsapp: 'WhatsApp', direct: t.direct, other: t.other};
-    const rows = [...sources].sort((a,b) => b[1].visits - a[1].visits || b[1].views - a[1].views);
-    return `<table class="ins-table"><thead><tr><th scope="col">${t.sourceLabel}</th><th scope="col">${t.visits}</th><th scope="col">${t.views}</th></tr></thead><tbody>${rows.map(([key, counts]) => `<tr><th scope="row">${labels[key] || t.other}</th><td data-label="${t.visits}">${integer.format(counts.visits)}</td><td data-label="${t.views}">${integer.format(counts.views)}</td></tr>`).join('')}</tbody></table>`;
+    const labels = {facebook:'Facebook', whatsapp:'WhatsApp', direct:t.direct, other:t.other};
+    const keys = metricKeys;
+    const rows = [...sources].sort((a,b) => b[1].visits - a[1].visits || b[1].views - a[1].views || b[1].saved - a[1].saved);
+    return `<div class="ins-table-wrap"><table class="ins-table"><thead><tr><th scope="col">${t.sourceLabel}</th>${keys.map(k => `<th scope="col">${t[k]}</th>`).join('')}</tr></thead><tbody>${rows.map(([key, counts]) => `<tr><th scope="row">${labels[key] || t.other}</th>${keys.map(k => `<td data-label="${esc(t[k])}">${integer.format(counts[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   }
   function metrics(r, carId) {
-    return `<dl class="ins-metrics">${metricKeys.map((k, i) => `<div><dt>${esc(t[k === 'visits' && carId ? 'carVisits' : k])}</dt><dd>${integer.format(r.counts[k])}<small>${t[metricNotes[i]]}</small></dd></div>`).join('')}</dl>`;
+    return `<dl class="ins-metrics">${metricKeys.map((key, i) => {
+      const earlier = r.firstForMetric[key] <= r.previousStart ? integer.format(r.previous[key])
+        : r.previous[key] ? `${integer.format(r.previous[key])} · ${t.partialHistory}` : t.noBaseline;
+      const compared = r.comparable ? `<small class="ins-previous">${t.previousValue} · ${esc(earlier)}</small>` : '';
+      return `<div><dt>${esc(t[key === 'visits' && carId ? 'carVisits' : key])}</dt><dd>${integer.format(r.counts[key])}${compared}<small>${t[metricNotes[i]]}</small></dd></div>`;
+    }).join('')}</dl>`;
   }
-  function chart(r) {
-    if (!r.counts.views) return `<div class="ins-chart-empty"><p>${t.noViews}</p></div>`;
+  function chart(r, metric) {
+    if (!r.counts[metric]) return `<div class="ins-chart-empty"><p>${metric === 'views' ? t.noViews : t.noActivity}</p></div>`;
     const totalDays = r.end - r.start + 1;
     const step = Math.max(1, Math.ceil(totalDays / 32));
     const buckets = [];
@@ -531,19 +551,21 @@
       const end = Math.min(r.end, start + step - 1);
       let count = 0;
       for (let d = start; d <= end; d++) count += r.days[d] || 0;
-      const from = tickFormat.format(asDay(start)),
-        to = tickFormat.format(asDay(end));
+      const labels = new Date(asDay(r.start)).getUTCFullYear() === new Date(asDay(r.end)).getUTCFullYear() ? tickFormat : dateLabel;
+      const from = labels.format(asDay(start)), to = labels.format(asDay(end));
       const label = step === 1 ? from : `${from} – ${to}`;
       buckets.push({ label, count });
     }
     const high = Math.max(1, ...buckets.map((b) => b.count));
-    return `<figure class="ins-chart"><figcaption>${step === 1 ? t.daily : t.range} <span>${t.total} ${integer.format(r.counts.views)}</span></figcaption><div class="ins-bars" aria-hidden="true">${buckets.map((b) => `<div class="ins-bar-column" title="${esc(b.label)} · ${b.count}"><svg viewBox="0 0 1 100" preserveAspectRatio="none" focusable="false"><rect x="0" y="${100 - (b.count * 100) / high}" width="1" height="${(b.count * 100) / high}"></rect></svg></div>`).join('')}</div><div class="ins-axis"><span>${esc(buckets[0].label)}</span><span>${esc(buckets[buckets.length - 1].label)}</span></div><details><summary>${t.details}</summary><dl class="ins-chart-data">${buckets.map((b) => `<div><dt>${esc(b.label)}</dt><dd>${integer.format(b.count)}</dd></div>`).join('')}</dl></details></figure>`;
+    return `<figure class="ins-chart"><figcaption>${step === 1 ? t.daily : t.range} <span>${t.total} ${integer.format(r.counts[metric])}</span></figcaption><div class="ins-bars" aria-hidden="true">${buckets.map((b) => `<div class="ins-bar-column" title="${esc(b.label)} · ${b.count}"><svg viewBox="0 0 1 100" preserveAspectRatio="none" focusable="false"><rect x="0" y="${100 - (b.count * 100) / high}" width="1" height="${(b.count * 100) / high}"></rect></svg></div>`).join('')}</div><div class="ins-axis"><span>${esc(buckets[0].label)}</span><span>${esc(buckets[buckets.length - 1].label)}</span></div><details><summary>${t.details}</summary><dl class="ins-chart-data">${buckets.map((b) => `<div><dt>${esc(b.label)}</dt><dd>${integer.format(b.count)}</dd></div>`).join('')}</dl></details></figure>`;
   }
   function stats(panel, data) {
     const params = new URLSearchParams(location.search);
     const period = ['7', '30', 'all'].includes(params.get('period')) ? params.get('period') : '7';
     const carId = params.get('vehicle') || '';
-    const r = report(data, period, carId),
+    const metric = metricKeys.includes(params.get('metric')) ? params.get('metric') : 'views';
+    const metricQuery = metric === 'views' ? {} : {metric};
+    const r = report(data, period, carId, metric),
       car = findCar(carId);
     const ids = Array.from(
       new Set(
@@ -556,14 +578,28 @@
         ].filter(Boolean),
       ),
     );
-    const carName = (cid) =>
-      title(findCar(cid)) || data.leads.find((l) => l.car === cid && l.title)?.title || cid;
+    const names = new Map(), nameCounts = new Map();
+    for (const cid of ids) {
+      const name = title(findCar(cid)) || data.leads.find(l => l.car === cid && l.title)?.title || cid;
+      names.set(cid,name);
+      nameCounts.set(name,(nameCounts.get(name) || 0) + 1);
+    }
+    const carName = cid => {
+      const name = names.get(cid) || cid;
+      if (nameCounts.get(name) <= 1) return name;
+      const car = findCar(cid);
+      const details = [car?.year, car?.km != null ? integer.format(car.km) + ' km' : ''].filter(Boolean);
+      const match = ids.some(other => other !== cid && names.get(other) === name &&
+        findCar(other)?.year === car?.year && findCar(other)?.km === car?.km);
+      if (match || !details.length) details.push(cid);
+      return [name, ...details].join(' · ');
+    };
     if (carId && !ids.includes(carId)) {
-      panel.innerHTML = `<div class="ins-dashboard"><a class="ins-back" href="${esc(makeOwnerURL('stats', { period }))}">← ${t.backStats}</a><h1>${t.stats}</h1><p class="ins-note">${t.reportUnavailable}</p></div>`;
+      panel.innerHTML = `<div class="ins-dashboard"><a class="ins-back" href="${esc(makeOwnerURL('stats', { period, ...metricQuery }))}">← ${t.backStats}</a><h1>${t.stats}</h1><p class="ins-note">${t.reportUnavailable}</p></div>`;
       return;
     }
     const rows = ids
-      .map((cid) => ({ id: cid, name: carName(cid), ...report(data, period, cid).counts }))
+      .map((cid) => ({ id: cid, name: carName(cid), ...(r.byCar.get(cid) || emptyCounts()) }))
       .sort((a, b) => b.views - a.views || a.name.localeCompare(b.name, locale));
     const strip = `<div class="ins-period" role="group" aria-label="${t.period}">${[
       ['7', 'seven'],
@@ -572,19 +608,83 @@
     ]
       .map(
         ([v, key]) =>
-          `<a class="${v === period ? 'is-current' : ''}" ${v === period ? 'aria-current="true"' : ''} href="${esc(makeOwnerURL('stats', { period: v, vehicle: carId }))}">${t[key]}</a>`,
+          `<a class="${v === period ? 'is-current' : ''}" ${v === period ? 'aria-current="true"' : ''} href="${esc(makeOwnerURL('stats', { period: v, vehicle: carId, ...metricQuery }))}">${t[key]}</a>`,
       )
       .join('')}</div>`;
     let list = '';
     if (!carId) {
       const keys = ['views', 'saved', 'bookings'];
-      list = `<section class="ins-section"><h2>${t.byCar}</h2>${rows.length ? `<div class="ins-table-wrap"><table class="ins-table"><thead><tr><th scope="col">${t.car}</th>${keys.map((k) => `<th scope="col">${t[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr><th scope="row"><a href="${esc(makeOwnerURL('stats', { period, vehicle: row.id }))}">${esc(row.name)} <span aria-hidden="true">↗</span></a></th>${keys.map((k) => `<td data-label="${esc(t[k])}">${integer.format(row[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : `<p>${t.noCars}</p>`}</section>`;
+      list = `<section class="ins-section"><h2>${t.byCar}</h2>${rows.length ? `<div class="ins-table-wrap"><table class="ins-table"><thead><tr><th scope="col">${t.car}</th>${keys.map((k) => `<th scope="col">${t[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr><th scope="row"><a href="${esc(makeOwnerURL('stats', { period, vehicle: row.id, ...metricQuery }))}">${esc(row.name)} <span aria-hidden="true">↗</span></a></th>${keys.map((k) => `<td data-label="${esc(t[k])}">${integer.format(row[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : `<p>${t.noCars}</p>`}</section>`;
     } else {
-      list = `<section class="ins-section"><h2>${t.linked}</h2>${r.leads.length ? `<p>${t.inboxNote}</p><ul class="ins-linked">${r.leads.map((l) => `<li><a href="${esc(makeOwnerURL('enquiries', { lead: l.id, vehicle: carId, period }))}">${esc(l.fields.name || l.title || t[l.type])} · ${esc(t[l.type === 'manual' ? 'ownWhats' : l.type])}</a><span>${dateFormat.format(l.time)}</span></li>`).join('')}</ul>` : `<p>${t.relatedEmpty}</p>`}</section>`;
+      list = `<section class="ins-section"><h2>${t.linked}</h2>${r.leads.length ? `<p>${t.inboxNote}</p><ul class="ins-linked">${r.leads.map((l) => `<li><a href="${esc(makeOwnerURL('enquiries', { lead: l.id, vehicle: carId, period, ...metricQuery }))}">${esc(l.fields.name || l.title || t[l.type])} · ${esc(t[l.type === 'manual' ? 'ownWhats' : l.type])}</a><span>${dateFormat.format(l.time)}</span></li>`).join('')}</ul>` : `<p>${t.relatedEmpty}</p>`}</section>`;
     }
-    panel.innerHTML = `<div class="ins-dashboard">${carId ? `<a class="ins-back" href="${esc(makeOwnerURL('stats', { period }))}">← ${t.backStats}</a>` : ''}<div class="ins-report-head"><div><h1>${esc(carId ? carName(carId) : t.stats)}</h1><p>${t.device}</p></div>${strip}</div>${metrics(r, carId)}<section class="ins-section"><h2>${t.trend}</h2>${chart(r)}</section><section class="ins-section"><h2>${t.sources}</h2>${sourceTable(r.sources)}</section>${list}${car && car.status !== 'draft' ? `<a class="ins-back" href="${esc(carURL(carId))}">${t.openListing} ↗</a>` : ''}</div>`;
+    const range = rangeLabel(r.start,r.end);
+    const comparison = period === 'all' ? '' : r.comparable
+      ? ` · ${t.comparedWith} ${rangeLabel(r.previousStart, r.start-1)}` : ' · ' + t.historyShort;
+    const metricChoices = metricKeys.map(k => option(k, t[k === 'visits' && carId ? 'carVisits' : k], metric)).join('');
+    const kinds = ['question', 'viewing', 'sourcing', 'import', 'manual'];
+    const byType = kinds.map(kind => [kind, r.leads.filter(l => l.type === kind).length]).filter(([,count]) => count);
+    const typesBlock = `<section class="ins-section"><h2>${t.enquiryTypes}</h2><p>${t.inboxNote}</p>${byType.length
+      ? `<dl class="ins-type-totals">${byType.map(([key,count]) => `<div><dt><a href="${esc(makeOwnerURL('enquiries',{kind:key,period,vehicle:carId,from:'stats',...metricQuery}))}">${esc(t[key === 'manual' ? 'ownWhats' : key])}</a></dt><dd>${integer.format(count)}</dd></div>`).join('')}</dl>`
+      : `<p>${t.relatedEmpty}</p>`}</section>`;
+    panel.innerHTML = `<div class="ins-dashboard">${carId ? `<a class="ins-back" href="${esc(makeOwnerURL('stats', { period, ...metricQuery }))}">← ${t.backStats}</a>` : ''}<div class="ins-report-head"><div><h1>${esc(carId ? carName(carId) : t.stats)}</h1><p>${t.device}</p></div>${strip}</div><p class="ins-range">${esc(range + comparison)}<br>${t.todayOngoing}</p>${metrics(r, carId)}<section class="ins-section"><h2>${metric === 'views' ? t.trend : t.trendMetric + ' · ' + t[metric]}</h2><label class="ins-metric-choice">${t.chartMetric}<select name="metric" data-chart-metric>${metricChoices}</select></label>${chart(r, metric)}</section><section class="ins-section"><h2>${t.sources}</h2>${sourceTable(r.sources)}<p class="ins-note">${t.sourceInfo}</p></section>${typesBlock}${list}${car && car.status !== 'draft' ? `<a class="ins-back" href="${esc(carURL(carId))}">${t.openListing} ↗</a>` : ''}<div class="ins-export"><button type="button" class="ins-secondary" data-export-metrics>${t.exportFigures}</button><p>${t.exportSummary}</p></div></div>`;
+    panel.querySelector('[data-export-metrics]').addEventListener('click', () => {
+      const labels = {facebook:'Facebook', whatsapp:'WhatsApp', direct:t.direct, other:t.other};
+      const groups = new Map();
+      for (const row of data.metrics) {
+        const day = dayNumber(row.day);
+        if (day < r.start || day > r.end || carId && carId !== row.car) continue;
+        const id = [row.day, row.source, row.car].join('|');
+        const line = groups.get(id) || {day:row.day, source:row.source, car:row.car, counts:emptyCounts()};
+        const key = row.kind === 'visit' ? 'visits' : row.kind === 'view' ? 'views' : row.kind;
+        if (Object.hasOwn(line.counts,key)) line.counts[key] += row.count;
+        groups.set(id,line);
+      }
+      const lines = [[t.reportDay, t.sourceLabel, t.car, t.listingReference, ...metricKeys.map(k => t[k])]];
+      for (const line of groups.values()) lines.push([line.day, labels[line.source] || t.other, line.car ? carName(line.car) : t.general, line.car,
+        ...metricKeys.map(key => line.counts[key])]);
+      const quote = field => {
+        let value = String(field);
+        if (/^[\s]*[=+@-]/u.test(value)) value = "'" + value;
+        return '"' + value.replaceAll('"','""') + '"';
+      };
+      const file = new Blob(['\uFEFF',lines.map(line => line.map(quote).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(file);
+      const iso = day => new Date(asDay(day)).toISOString().slice(0,10);
+      link.download = `Claude-Cars_${iso(r.start)}_${iso(r.end)}.csv`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 1500);
+    });
+    panel.querySelector('[data-chart-metric]').addEventListener('change', event => {
+      const chosen = event.target.value;
+      const next = makeOwnerURL('stats',{period, vehicle:carId, metric:chosen === 'views' ? '' : chosen});
+      history.pushState({}, '', next);
+      stats(panel, data);
+      focusField(panel.querySelector('[data-chart-metric]'));
+      for (const link of document.querySelectorAll('#mast [data-cc-language]'))
+        link.href = '/' + link.dataset.ccLanguage + '/owner' + location.search;
+    });
   }
   let recentChange = null;
+  const manualStore = 'claude-cars.owner.contact.v1';
+  let manualCache = null;
+  function clearManualDraft() {
+    manualCache = null;
+    try { sessionStorage.removeItem(manualStore); } catch {}
+  }
+  function readManualDraft() {
+    try { manualCache = JSON.parse(sessionStorage.getItem(manualStore)) || manualCache; } catch {}
+    if (!manualCache?.fields || !manualCache.id || Date.now() - manualCache.time > 30*60000) clearManualDraft();
+    return manualCache;
+  }
+  function stashManual(id, fields) {
+    if (!Object.values(fields).some(Boolean)) { clearManualDraft(); return; }
+    manualCache = {id, fields, time:Date.now()};
+    try { sessionStorage.setItem(manualStore, JSON.stringify(manualCache)); } catch {}
+  }
   function inbox(panel, data, api) {
     const params = new URLSearchParams(location.search);
     const selected = params.get('lead');
@@ -592,23 +692,33 @@
     const contextCar = params.get('vehicle');
     const states = ['new', 'replied', 'booked'];
     const filter = states.includes(params.get('status')) ? params.get('status') : '';
-    const statusQuery = filter ? {status:filter} : {};
-    const rows = selected ? data.leads.filter((lead) => lead.id === selected) :
-      data.leads.filter((lead) => !filter || lead.status === filter);
-    const filters = !selected && (data.leads.length > 1 || filter) ? `<nav class="ins-period ins-inbox-filters" aria-label="${t.filterStatus}">${['', ...states].map(state => {
-      const n = state ? data.leads.filter(lead => lead.status === state).length : data.leads.length;
-      const url = makeOwnerURL('enquiries', state ? {status:state} : {});
+    const kind = [...types, 'manual'].includes(params.get('kind')) ? params.get('kind') : '';
+    const fromStats = !!contextCar || params.get('from') === 'stats';
+    const metric = metricKeys.includes(params.get('metric')) ? params.get('metric') : '';
+    const sourceQuery = fromStats ? {from:'stats', period, vehicle:contextCar, metric} : {};
+    const statusQuery = {...sourceQuery, kind, status:filter};
+    const today = dayNumber(dateKey(Date.now()));
+    const inGroup = data.leads.filter(lead => {
+      if (kind && lead.type !== kind || fromStats && contextCar && lead.car !== contextCar) return false;
+      const day = dayNumber(dateKey(lead.time));
+      return !fromStats || period === 'all' || day >= today - Number(period) + 1 && day <= today;
+    });
+    const rows = selected ? data.leads.filter(lead => lead.id === selected) :
+      inGroup.filter(lead => !filter || lead.status === filter);
+    const filters = !selected && (inGroup.length > 1 || filter) ? `<nav class="ins-period ins-inbox-filters" aria-label="${t.filterStatus}">${['', ...states].map(state => {
+      const n = state ? inGroup.filter(lead => lead.status === state).length : inGroup.length;
+      const url = makeOwnerURL('enquiries', {...statusQuery, status:state});
       return `<a href="${esc(url)}" ${filter === state ? 'class="is-current" aria-current="page"' : ''}>${state ? t[state] : t.allRequests} <span>${integer.format(n)}</span></a>`;
     }).join('')}</nav>` : '';
-    const reportLink = contextCar ? makeOwnerURL('stats', { vehicle: contextCar, period }) : '';
-    const contextLinks = selected
-      ? `<nav class="ins-return"><a class="ins-back" href="${esc(makeOwnerURL('enquiries', statusQuery))}">← ${filter ? t[filter] : t.allRequests}</a>${reportLink ? `<a class="ins-back" href="${esc(reportLink)}">← ${t.backReport}</a>` : ''}</nav>`
+    const reportLink = fromStats ? makeOwnerURL('stats',{vehicle:contextCar, period, metric}) : '';
+    const contextLinks = selected || kind || fromStats
+      ? `<nav class="ins-return"><a class="ins-back" href="${esc(makeOwnerURL('enquiries', selected ? statusQuery : {}))}">← ${filter && selected ? t[filter] : kind && selected ? t[kind === 'manual' ? 'ownWhats' : kind] : t.allRequests}</a>${reportLink ? `<a class="ins-back" href="${esc(reportLink)}">← ${t.backReport}</a>` : ''}</nav>`
       : '';
     function row(lead) {
       const status = ['booked', 'replied'].includes(lead.status) ? lead.status : 'new';
       const leadName = lead.fields.name || lead.title || t[lead.type === 'manual' ? 'ownWhats' : lead.type];
       const detailURL = makeOwnerURL('enquiries', { lead: lead.id, ...statusQuery });
-      const carStatsURL = makeOwnerURL('stats', { vehicle: lead.car, period });
+      const carStatsURL = makeOwnerURL('stats', { vehicle: lead.car, period, metric });
       let reach = '';
       if (lead.fields.reach) {
         const contact = lead.fields.reach;
@@ -636,13 +746,20 @@
           : '';
       const reopen = selected && status !== 'new' && !undo
         ? `<button class="ins-text-btn" type="button" data-state="new" data-lead="${esc(lead.id)}">${t.reopen}</button>` : '';
-      return `<article class="ins-lead${selected === lead.id ? ' is-selected' : ''}" id="ins-lead-${esc(lead.id)}" tabindex="-1"><div class="ins-lead-heading"><h2>${esc(leadName)}</h2><span aria-live="polite">${t[status]}</span></div><p class="ins-lead-meta">${esc([t[lead.type === 'manual' ? 'ownWhats' : lead.type], lead.lang?.toUpperCase(), dateFormat.format(lead.time), lead.buyerUpdatedAt ? t.buyerUpdated : ''].filter(Boolean).join(' · '))}</p>${lead.title ? `<p class="ins-lead-car">${findCar(lead.car) ? `<a class="ins-back" href="${esc(carURL(lead.car))}">${esc(lead.title)}</a>` : esc(lead.title)}</p>` : ''}${selected ? `<dl class="ins-lead-data">${reach}${details}</dl>` : ''}<div class="ins-actions">${selected ? '' : `<a class="ins-text-btn" href="${esc(detailURL)}">${t.openRequest}</a>`}${status === 'new' ? `<button type="button" class="ins-secondary" data-state="replied" data-lead="${esc(lead.id)}">${t.markReply}</button>` : ''}${status !== 'booked' ? `<button type="button" class="ins-secondary" data-state="booked" data-lead="${esc(lead.id)}">${t.markBooked}</button>` : ''}${undo}${reopen}</div>${selected && lead.car ? `<a class="ins-back" href="${esc(carStatsURL)}">${t.viewStats}</a>` : ''}</article>`;
+      const car = findCar(lead.car);
+      const dossier = car?.status === 'draft' ? makeOwnerURL('edit',{car:lead.car}) : carURL(lead.car);
+      const appointment = !selected && lead.fields.date ? `<p class="ins-appointment"><strong>${t.requestedTime}</strong> · ${esc(fieldValue('date',lead.fields.date))}</p>` : '';
+      return `<article class="ins-lead${selected === lead.id ? ' is-selected' : ''}" id="ins-lead-${esc(lead.id)}" tabindex="-1"><div class="ins-lead-heading"><h2>${esc(leadName)}</h2><span aria-live="polite">${t[status]}</span></div><p class="ins-lead-meta">${esc([t[lead.type === 'manual' ? 'ownWhats' : lead.type], lead.lang?.toUpperCase(), dateFormat.format(lead.time), lead.buyerUpdatedAt ? t.buyerUpdated : ''].filter(Boolean).join(' · '))}</p>${lead.title ? `<p class="ins-lead-car">${car ? `<a class="ins-back" href="${esc(dossier)}">${esc(lead.title)}</a>` : esc(lead.title)}</p>` : ''}${appointment}${selected ? `<dl class="ins-lead-data">${reach}${details}</dl>` : ''}<div class="ins-actions">${selected ? '' : `<a class="ins-text-btn" href="${esc(detailURL)}">${t.openRequest}</a>`}${status === 'new' ? `<button type="button" class="ins-secondary" data-state="replied" data-lead="${esc(lead.id)}">${t.markReply}</button>` : ''}${status !== 'booked' ? `<button type="button" class="ins-secondary" data-state="booked" data-lead="${esc(lead.id)}">${t.markBooked}</button>` : ''}${undo}${reopen}</div>${selected && lead.car ? `<a class="ins-back" href="${esc(carStatsURL)}">${t.viewStats}</a>` : ''}</article>`;
     }
-    const manualForm = selected
-      ? ''
-      : `<details class="ins-manual"><summary>${t.manual}</summary><form data-manual novalidate><p class="ins-instruction">${t.requiredFields}</p><div class="ins-pair">${field('name', t.ownerName, '', 'required')}${field('reach', t.reach, '', 'required')}</div>${carSelect('', 'question')}${field('note', t.note, '', '', true)}<button class="ins-primary" type="submit">${t.add}</button></form></details>`;
-    panel.innerHTML = `<div class="ins-dashboard">${contextLinks}<div class="ins-report-head"><div><h1>${selected ? t.enquiryDetail : t.enquiries}</h1><p>${t.inboxNote}</p></div></div>${manualForm}${filters}<p class="ins-error" role="status"></p><div class="ins-leads">${rows.length ? rows.map(row).join('') : `<p>${selected ? t.missingLead : filter ? t.noMatching : t.noRequests}</p>`}</div></div>`;
-    const output = panel.querySelector('[role="status"]');
+    let stored = readManualDraft();
+    const saved = stored && data.leads.find(lead => lead.id === stored.id);
+    if (saved) { clearManualDraft(); stored = null; }
+    const valuesBefore = stored?.fields || {};
+    const manualForm = selected ? '' : `<details class="ins-manual" ${stored ? 'open' : ''}><summary>${t.manual}</summary><form data-manual novalidate><p class="ins-instruction">${stored ? t.manualResumed : t.requiredFields}</p><div class="ins-pair">${field('name', t.ownerName, valuesBefore.name || '', 'required')}${field('reach', t.reach, valuesBefore.reach || '', 'required')}</div>${carSelect(valuesBefore.car || '', 'question')}${field('note', t.note, valuesBefore.note || '', '', true)}<div class="ins-actions"><button class="ins-primary" type="submit">${t.add}</button><button class="ins-text-btn" type="button" data-forget-manual ${stored ? '' : 'hidden'}>${t.clearDraft}</button></div><p class="ins-error" data-manual-status role="status"></p></form></details>`;
+    const group = [kind && t[kind === 'manual' ? 'ownWhats' : kind], fromStats && contextCar && title(findCar(contextCar)),
+      fromStats && t[period === 'all' ? 'all' : period === '7' ? 'seven' : 'thirty']].filter(Boolean).join(' · ');
+    panel.innerHTML = `<div class="ins-dashboard">${contextLinks}<div class="ins-report-head"><div><h1>${selected ? t.enquiryDetail : t.enquiries}</h1>${group ? `<p>${esc(group)}</p>` : ''}<p>${t.inboxNote}</p></div></div>${manualForm}${filters}<p class="ins-error" data-inbox-status role="status">${saved ? `<a href="${esc(makeOwnerURL('enquiries',{lead:saved.id}))}">${t.contactSaved} →</a>` : ''}</p><div class="ins-leads">${rows.length ? rows.map(row).join('') : `<p>${selected ? t.missingLead : filter || kind ? t.noMatching : t.noRequests}</p>`}</div></div>`;
+    const output = panel.querySelector('[data-inbox-status]');
     const manual = panel.querySelector('[data-manual]');
     const manualErrors = () => {
       const f = values(manual);
@@ -656,11 +773,29 @@
       next?.focus();
     }
     let submitting = false;
-    const manualId = uid();
+    const manualId = stored?.id || uid();
+    if (manual) {
+      const forget = manual.querySelector('[data-forget-manual]');
+      const saveInput = () => {
+        const fields = values(manual);
+        stashManual(manualId,fields);
+        forget.hidden = !Object.values(fields).some(Boolean);
+      };
+      manual.addEventListener('input',saveInput);
+      manual.addEventListener('change',saveInput);
+      forget.onclick = () => {
+        if (!window.confirm(t.clearPrompt)) return;
+        clearManualDraft();
+        inbox(panel,data,api);
+        panel.querySelector('.ins-manual summary').focus();
+      };
+    }
     if (manual) manual.onsubmit = async (e) => {
       e.preventDefault();
       if (submitting || !validation(manual, manualErrors())) return;
-      const {name, reach, car, note} = values(manual);
+      const fields = values(manual);
+      stashManual(manualId,fields);
+      const {name, reach, car, note} = fields;
       submitting = true;
       const button = manual.querySelector('button[type=submit]');
       button.disabled = true;
@@ -668,11 +803,20 @@
         await api('/api/owner/enquiries', 'POST', {
           id: manualId, type: 'manual', lang, car, fields: {name, reach, note},
         });
-        if (filter && filter !== 'new') {
+        clearManualDraft();
+        if (fromStats || kind || filter && filter !== 'new') {
           location.assign(makeOwnerURL('enquiries', {lead:manualId}));
         } else await refresh(manualId);
       } catch (error) {
-        output.textContent = error.message === 'session' ? window.CCOwnerLocales.t('session',lang) : t.sendError;
+        const status = manual.querySelector('[data-manual-status]');
+        if (error.message === 'session') status.textContent = window.CCOwnerLocales.t('session',lang);
+        else {
+          status.textContent = t.checkContact;
+          const retry = document.createElement('button');
+          retry.type = 'button'; retry.className = 'ins-text-btn'; retry.textContent = t.refreshInbox;
+          retry.onclick = () => location.reload();
+          status.append(' ',retry);
+        }
       } finally {
         submitting = false;
         button.disabled = false;
@@ -708,6 +852,6 @@
     if (tab === 'stats') stats(panel, data);
     else if (tab === 'enquiries') inbox(panel, data, api);
   }
-  window.CCInsights = { renderOwner };
+  window.CCInsights = { renderOwner, clearManualDraft };
   if (page === 'contact') contactPage();
 })();

@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import catalogue as catalog
 import enquiries
+import site_content
 import site_stats
 from catalogue import Problem
 
@@ -201,6 +202,8 @@ class SiteRequest:
                     self.mutate()
                 else:
                     self.output(405, headers=[("Allow", "GET, HEAD, POST, PUT")])
+        except site_content.InvalidField as e:
+            self.reply({"error": e.code, "field": e.field}, e.status)
         except Problem as e:
             self.reply({"error": e.code}, e.status)
         except sqlite3.OperationalError:
@@ -293,6 +296,10 @@ class SiteRequest:
             return
         if path.startswith("/api/owner/"):
             self.require_owner()
+            section = re.fullmatch(r"/api/owner/site/([a-z]+)", path)
+            if section:
+                self.reply(site_content.read(self.db, section[1]))
+                return
             if path == "/api/owner/enquiries":
                 self.db.execute("BEGIN")
                 self.reply({"leads": enquiries.records(self.db), "views": enquiries.views(self.db),
@@ -354,9 +361,16 @@ class SiteRequest:
                 self.db.commit()
             except sqlite3.OperationalError:
                 self.db.rollback()
+        sections = site_content.public(self.db) if page != "owner" else {}
+        pinned = sections.get("home", {}).get("featured", []) if page == "home" else []
+        if pinned:
+            order = {ident: index for index, ident in enumerate(pinned)}
+            cars.sort(key=lambda item: order.get(item["id"], len(order)))
         nonce = secrets.token_urlsafe(20)
         info = dict(lang=lang, page=page, id=car["id"] if car else "", cars=cars,
                     authenticated=bool(owner), csrf=owner[1] if owner and page == "owner" else "")
+        if sections:
+            info["siteContent"] = sections
         context = json.dumps(info, ensure_ascii=True).replace("<", r"\u003c").replace(">", r"\u003e")
         title = PRIVACY[lang] if page == "privacy" else TITLES[lang][-1] if page == "missing" else (
             car["make"] + " " + car["model"] if car else TITLES[lang][SECTIONS.index(page)])
@@ -376,6 +390,18 @@ class SiteRequest:
         if car:
             description = social_description(car, lang)
             image_path = car["cover"]
+        section_name = "profile" if page == "about" else page
+        section = sections.get(section_name, {})
+        texts = section.get("texts", {}).get(lang, {})
+        meta_keys = {"home": ("aboutTitle", "coverLine"), "catalogue": ("current", "catalogueIntro"),
+                     "about": ("aboutTitle", "story"), "contact": ("contactPage", "contactIntro"),
+                     "privacy": ("privacy", "privacyEnquiriesText")}
+        if texts and page in meta_keys:
+            title_key, description_key = meta_keys[page]
+            title = texts.get(title_key, title)
+            description = texts.get(description_key, description)
+        if section_name in site_content.IMAGE_KEYS:
+            image_path = section.get("images", {}).get(site_content.IMAGE_KEYS[section_name], image_path)
         e = lambda value: html.escape(value, quote=True)
         path = self.url.path.rstrip("/") + ("/" if page == "home" else "")
         canonical = self.origin + path
@@ -391,7 +417,11 @@ class SiteRequest:
                 stock = f"<ul>{items}</ul>" if items else ""
             navigation = " · ".join(f'<a href="/{lang}/{route}">{e(label)}</a>' for route, label in
                                     zip(("cars", "about", "contact", "privacy"), (*TITLES[lang][1:4], PRIVACY[lang])))
-            phone = '<p><a href="tel:+32496807976">+32 496 80 79 76</a></p>' if page in ("car", "contact", "owner") else ""
+            phone = ""
+            if page in ("car", "contact", "owner"):
+                label = sections.get("contact", {}).get("contacts", {}).get("phone", "+32 496 80 79 76")
+                number = re.sub(r"[^0-9+]", "", label)
+                phone = f'<p><a href="tel:{number}">{e(label)}</a></p>'
             story = ""
             if car:
                 original = car["translations"].get("fr", {})
@@ -412,11 +442,17 @@ class SiteRequest:
             scripts += ["insights-locales", "insights"]
             styles.append("insights")
         if page == "owner":
-            scripts += ["vehicle-directory", "owner-locales", "owner"]
+            scripts += ["vehicle-directory", "owner-locales"]
             styles.append("owner")
+            if owner:
+                scripts += ["owner-site-locales", "owner-site"]
+                styles.append("owner-site")
+            scripts.append("owner")
         if page in ("contact", "owner"):
             scripts.append("select")
             styles.append("select")
+        if sections:
+            scripts.append("site-bindings")
         css = "".join(f'<link rel="stylesheet" href="/web/{name}.css">' for name in styles)
         js = "".join(f'<script defer src="/web/{name}.js"></script>' for name in scripts)
         og_image = f'<meta property="og:image" content="{e(self.origin + image_path)}">' if image_path else ""
@@ -441,7 +477,7 @@ class SiteRequest:
         # Draft and unattached files remain private even with a known URL.
         public = self.db.execute("""SELECT 1 FROM assets JOIN cars ON assets.car_id=cars.id
                      WHERE assets.path=? AND json_extract(cars.data,'$.status') <> 'draft' LIMIT 1""", (path,)).fetchone()
-        if not public and not self.session():
+        if not public and not self.session() and not site_content.public_image(self.db, path):
             raise Problem("missing", 404)
         row = self.db.execute("SELECT mime,length(data) FROM media WHERE path=?", (path,)).fetchone()
         if not row:
@@ -512,6 +548,12 @@ class SiteRequest:
             self.reply(acknowledgement, 201)
             return
         token, _ = self.require_owner(write=True)
+        section = re.fullmatch(r"/api/owner/site/([a-z]+)", path)
+        if not post and section:
+            state = site_content.save(self.db, section[1], self.json_body(limit=2 * MIB))
+            self.db.commit()
+            self.reply(state)
+            return
         if post and path == "/api/owner/enquiries":
             ident = enquiries.create(self.db, self.json_body(limit=16 * 1024))
             self.db.commit()
@@ -667,6 +709,7 @@ def settings_for(directory, *, production=False, demo=False):
     catalog.init(db, draft_seed=production or bool(origin), demo=demo)
     with catalog.connection(db) as connection:
         enquiries.initialize(connection)
+        site_content.initialize(connection)
     clean_expired(db)
     password = new_password(directory)
     salt = secrets.token_bytes(24)

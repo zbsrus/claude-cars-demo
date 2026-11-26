@@ -2,7 +2,32 @@
 (() => {
   const languages = ["fr", "nl", "de", "en", "es"];
   const copy = {
-    withdraw: ["Retirer du site", "Van de site halen", "Vom Angebot zurückziehen", "Remove from the site", "Retirar de la web"],
+    site: ["Mon site", "Mijn website", "Meine Website", "My website", "Mi web"],
+    searchListings: ["Rechercher par marque, modèle ou année", "Zoeken op merk, model of jaar", "Nach Marke, Modell oder Jahr suchen", "Search by make, model or year", "Buscar por marca, modelo o año"],
+    recovered: ["Vos modifications ont été récupérées. Enregistrez-les pour les conserver.", "Je wijzigingen zijn hersteld. Sla ze op om ze te bewaren.", "Ihre Änderungen wurden wiederhergestellt. Speichern Sie sie, um sie zu übernehmen.", "Your changes were recovered. Save them to keep them.", "Se han recuperado tus cambios. Guárdalos para conservarlos."],
+    recoveredConflict: ["Cette annonce a changé depuis votre dernière modification. Votre saisie reste visible ici. Ouvrez la version enregistrée dans un autre onglet pour comparer et y copier les changements à garder.", "Deze advertentie is intussen gewijzigd. Je invoer blijft hier staan. Open de opgeslagen versie in een ander tabblad om te vergelijken en je wijzigingen over te nemen.", "Das Inserat hat sich inzwischen geändert. Ihre Eingaben bleiben hier sichtbar. Öffnen Sie die gespeicherte Version in einem neuen Tab, um die Änderungen zu vergleichen und zu übernehmen.", "This listing has changed. Your entries are still shown here. Open the saved version in another tab to compare and copy the changes you want to keep.", "Este anuncio ha cambiado. Tus datos siguen visibles aquí. Abre la versión guardada en otra pestaña para comparar y copiar los cambios que quieras conservar."],
+    latestInTab: ["Ouvrir la version enregistrée ↗", "Opgeslagen versie openen ↗", "Gespeicherte Version öffnen ↗", "Open saved version ↗", "Abrir la versión guardada ↗"],
+    photoRemoved: ["Photo retirée.", "Foto verwijderd.", "Foto entfernt.", "Photo removed.", "Foto retirada."],
+    videoRemoved: ["Vidéo retirée.", "Video verwijderd.", "Video entfernt.", "Video removed.", "Vídeo retirado."],
+    undo: ["Annuler le retrait", "Verwijderen ongedaan maken", "Entfernen rückgängig machen", "Undo removal", "Deshacer la eliminación"],
+    clearSearch: ["Effacer", "Wissen", "Zurücksetzen", "Clear", "Borrar"],
+    noSearchResults: [
+      "Aucune annonce correspondante dans cette liste. Essayez un autre modèle ou un autre onglet.",
+      "Geen overeenkomende advertentie in deze lijst. Probeer een ander model of tabblad.",
+      "Keine passenden Inserate in dieser Liste. Versuchen Sie ein anderes Modell oder eine andere Kategorie.",
+      "No matching listings in this list. Try another model or another tab.",
+      "No hay anuncios que coincidan en esta lista. Prueba con otro modelo u otra pestaña.",
+    ],
+    soldPlural: ["Vendues", "Verkocht", "Verkauft", "Sold", "Vendidos"],
+    privateArchive: ["Archives privées", "Privéarchief", "Privates Archiv", "Private archive", "Archivo privado"],
+    privatelyArchived: ["Archivée · privée", "Gearchiveerd · privé", "Archiviert · privat", "Archived · private", "Archivado · privado"],
+    noneArchived: ["Aucune annonce dans vos archives privées.", "Er staan geen advertenties in je privéarchief.", "Ihr privates Archiv ist leer.", "Your private archive is empty.", "Tu archivo privado está vacío."],
+    archiveHelp: ["Cette annonce est privée. Vous pouvez la modifier ici ou la remettre en ligne à la même adresse.", "Deze advertentie is privé. Je kunt ze hier bewerken of op hetzelfde adres opnieuw publiceren.", "Dieses Inserat ist privat. Sie können es hier bearbeiten oder unter derselben Adresse wieder veröffentlichen.", "This listing is private. You can edit it here or publish it again at the same address.", "Este anuncio es privado. Puedes editarlo aquí o volver a publicarlo en la misma dirección."],
+    privateArchiveAction: ["Archiver en privé", "Privé archiveren", "Privat archivieren", "Archive privately", "Archivar en privado"],
+    restorePublic: ["Restaurer et publier", "Herstellen en publiceren", "Wiederherstellen und veröffentlichen", "Restore and publish", "Restaurar y publicar"],
+    confirmArchive: ["Enregistrer vos modifications et déplacer cette annonce dans vos archives privées ? Elle sera invisible sur le site.", "Je wijzigingen opslaan en de advertentie naar je privéarchief verplaatsen? Ze is dan niet meer zichtbaar op de site.", "Ihre Änderungen speichern und das Inserat in Ihr privates Archiv verschieben? Auf der Website ist es dann nicht mehr sichtbar.", "Save your changes and move this listing to your private archive? It will be hidden on the website.", "¿Guardar tus cambios y mover este anuncio a tu archivo privado? Dejará de verse en la web."],
+    archivedNotice: ["Annonce enregistrée dans vos archives privées.", "Advertentie opgeslagen in je privéarchief.", "Inserat im privaten Archiv gespeichert.", "Listing saved in your private archive.", "Anuncio guardado en tu archivo privado."],
+    withdraw: ["Remettre en brouillon", "Terugzetten naar concept", "Zurück in die Entwürfe", "Move to drafts", "Pasar a borradores"],
     confirmWithdraw: [
       "Retirer cette annonce du site et enregistrer vos modifications dans les brouillons ? Vous pourrez la republier à la même adresse.",
       "Deze advertentie van de site halen en je wijzigingen als concept bewaren? Je kunt ze later op hetzelfde adres opnieuw publiceren.",

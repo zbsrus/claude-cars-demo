@@ -190,7 +190,8 @@
         <div class="cc-cover-intro"><p>${t("coverLine")}</p>
           <div class="cc-cover-links">${active.length ? button("#stock", t("exploreCars")) : button(routeToForm("sourcing"), t("search"))}
           <a class="cc-text-link" href="${active.length ? "#services" : routeToForm("import")}">${active.length ? t("services") : t("import")}${icon(active.length ? "down" : "arrow")}</a></div></div>
-      </div></section>`;
+      </div><a class="cc-cover-next" href="#stock" aria-label="${t("coverNext")}">${icon("arrowDown")}</a>
+    </section>`;
   }
   const inventoryIsSpread = (single) => single && inventoryDisplay.view === "grid" && inventoryDisplay.density === "standard";
   function inventoryPhotoSizes(spread) {
@@ -259,30 +260,31 @@
       '<div class="cc-service-links">' + button(routeToForm("sourcing"), t("search"), "cc-button-line") +
       button(routeToForm("import"), t("import"), "cc-button-line") + '</div></div></section>';
   }
-  function perspective(car) {
-    const opinion = details(car, "opinion");
-    const images = pictures(car);
-    const src = images.find(s => s === "/assets/z4/3.webp") || images[1];
-    if (!opinion.text || !src) return "";
-    const recordAnchor = details(car, "history").text ? "#cc-history" : "#dossier";
-    return '<section class="cc-section cc-perspective" aria-labelledby="cc-perspective-title"><div class="cc-perspective-copy"><h2 id="cc-perspective-title">' + t("whyChosen") +
-      '</h2><p class="cc-prose" lang="' + esc(opinion.code) + '">' + esc(opinion.text) +
-      '</p><div class="cc-actions"><a class="cc-doc-link" href="' + carPath(car) + recordAnchor + '">' +
-      t(recordAnchor === "#dossier" ? "detail" : "history") + icon("arrow") + '</a><a class="cc-text-link" href="' +
-      path("about") + '">' + t("about") + icon("arrow") + '</a></div></div><figure>' +
-      photo(src, "", "", false, "(max-width: 849px) 100vw, 52vw") + '<figcaption>' +
-      esc(caption(car,src,images.indexOf(src))) + '</figcaption></figure></section>';
+  function beforeVisit() {
+    // Use the public dossier, not a second copy of the example's condition.
+    const car = [...active, ...sold].find(item => item.id === "bmw-z4-e89-35is");
+    const condition = car ? details(car, "condition") : {text: ""};
+    const sentences = condition.code === lang ? (condition.text.match(/[^.!?]+(?:[.!?]+|$)/g) || []).map(s => s.trim()) : [];
+    const note = sentences.find(s => s.length <= 180 && /\b(?:jantes?|velgen|felgen|wheels?|llantas?)\b/i.test(s)) || sentences.find(s => s && s.length <= 180);
+    const example = note
+      ? '<div class="cc-visit-example"><p>' + esc(t("beforeVisitExample").replace("{car}", carName(car))) +
+        '</p><blockquote lang="' + esc(condition.code) + '">' + esc(note) + '</blockquote></div>' : '';
+    const target = condition.text ? carPath(car) + "#cc-condition" : path("about") + "#selection";
+    const label = condition.text ? t("beforeVisitDossier") : t("selectionTitle");
+    return '<section class="cc-section cc-perspective" aria-labelledby="cc-perspective-title"><div class="cc-perspective-copy"><h2 id="cc-perspective-title">' + t("beforeVisitTitle") +
+      '</h2><p class="cc-prose">' + t("beforeVisitIntro") + '</p>' + example + '<div class="cc-actions"><a class="cc-text-link" href="' +
+      target + '">' + label + icon("arrow") + '</a></div></div><figure>' +
+      photo("/assets/z4/3.webp", "", "", false, "(max-width: 849px) 100vw, 52vw") + '<figcaption>' + t("beforeVisitPhoto") + '</figcaption></figure></section>';
   }
   function home() {
-    const featured = active.find(car => car.status === "available") || active[0];
     const stock = active.length ? inventory(active, "h3", "stock-items", true) :
       '<div class="cc-wrap"><p class="cc-empty">' + t("noCars") + '</p><a class="cc-text-link" href="#services">' + t("services") + icon("down") + '</a></div>';
-    const story = featured ? perspective(featured) : cardSection(sold, "archive", true);
+    const archive = active.length ? "" : cardSection(sold, "archive", true);
     return '<div class="cc-home">' + hero() +
       '<section id="stock" class="cc-section cc-stock" tabindex="-1" aria-labelledby="cc-stock-title">' +
       '<div class="cc-wrap cc-stock-header"><h2 id="cc-stock-title" class="cc-section-title">' + t("featured") + '</h2>' +
       (active.length ? '<div class="cc-inventory-aside"><p>' + icon("clock") + t("appointment") + '</p>' + inventoryToolbar("stock-items") + '</div>' : "") +
-      '</div>' + stock + '</section>' + story + services() + '</div>';
+      '</div>' + stock + '</section>' + archive + beforeVisit() + services() + '</div>';
   }
   function catalogue() {
     const targets = [active.length && "stock-items", sold.length && "archive-items"].filter(Boolean).join(" ");

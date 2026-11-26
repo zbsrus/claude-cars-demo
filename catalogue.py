@@ -137,6 +137,8 @@ def normalized(db, raw):
             raise Problem()
         if "draftStatus" in raw:
             obj["draftStatus"] = draft_status
+        if raw.get("archived") is True:
+            obj["archived"] = True
     obj["year"] = number(raw.get("year"), 1886, 2100)
     obj["km"] = number(raw.get("km"), 0, 9999999)
     obj["price"] = number(raw.get("price"), 0, 999999999, cents=True)

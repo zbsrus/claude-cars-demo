@@ -12,15 +12,15 @@ from catalogue import initial_draft
 
 def build(output):
     files = [
-        "serve.py", "preview.py", "catalogue.py", "enquiries.py", "site_stats.py", "backup.py",
+        "serve.py", "preview.py", "catalogue.py", "enquiries.py", "site_stats.py", "site_content.py", "backup.py",
         "requirements.txt", "vehicle-directory.js", "deploy/Caddyfile", "deploy/claude-cars.service",
         "deploy/README.md", "assets/fonts/eb-garamond-regular.woff2", "assets/fonts/OFL-EB-Garamond.txt",
         "assets/identity/loop.svg", "assets/identity/z3-studio.webp", "assets/identity/claude-portrait.webp",
         "assets/identity/claude-portrait-600.webp", "assets/identity/claude-cars-social.jpg",
     ]
-    for component in ("public", "owner", "insights"):
+    for component in ("public", "owner", "insights", "owner-site"):
         files.extend(f"web/{component}{suffix}" for suffix in (".js", "-locales.js", ".css"))
-    files.extend(("web/base.css", "web/select.css", "web/select.js"))
+    files.extend(("web/base.css", "web/select.css", "web/select.js", "web/site-bindings.js"))
     for number in range(1, 4):
         files.extend((f"assets/z4/{number}.webp", f"assets/z4/{number}-720.webp"))
     seed = initial_draft(json.loads((ROOT / "content/z4.json").read_text()))
