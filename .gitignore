@@ -1,0 +1,12 @@
+.claude-data/
+__pycache__/
+.claude-demo/
+.DS_Store
+output/
+*.HEIC
+*.heic
+*.AAE
+*.aae
+.env
+.env.*
+!.env.example

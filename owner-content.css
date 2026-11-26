@@ -1,0 +1,286 @@
+.oc-panel {
+  min-width: 0;
+  color: var(--ink);
+}
+.oc-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+.oc-heading h2 {
+  font: normal clamp(30px, 3.1vw, 48px)/1.08 var(--display);
+  letter-spacing: -0.045em;
+  margin: 0;
+}
+.oc-panel :is(h2, h3) {
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+.oc-heading p,
+.oc-empty p {
+  color: var(--muted);
+  margin: 7px 0 0;
+  max-width: 56ch;
+  font-size: 15px;
+}
+.oc-public,
+.oc-tool {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  font: 600 13px var(--sans);
+  color: var(--green);
+  min-height: 42px;
+  padding: 5px 8px;
+  border-radius: 4px;
+}
+.oc-public {
+  flex-shrink: 0;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.oc-tool:hover:not(:disabled),
+.oc-public:hover {
+  background: #e7ece3;
+}
+.oc-languages {
+  padding: 0 0 18px;
+  margin: 0 0 18px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.oc-languages legend,
+.oc-fields label,
+#oc-reply-form label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.oc-languages > div {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  border: 1px solid var(--line);
+  background: #e9eee7;
+  padding: 3px;
+  border-radius: 6px;
+  margin-top: 6px;
+}
+.oc-lang {
+  position: relative;
+}
+.oc-lang input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+  inline-size: 100%;
+  block-size: 100%;
+}
+.oc-lang span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.oc-lang input:checked + span {
+  color: #fff;
+  background: var(--green);
+}
+.oc-lang input:focus-visible + span {
+  outline: 3px solid #c97529;
+  outline-offset: 2px;
+}
+.oc-lang input:hover:not(:checked) + span {
+  background: #dce7db;
+  color: var(--green);
+}
+.oc-fields {
+  display: grid;
+  gap: 17px;
+}
+.oc-fields textarea,
+#oc-reply-form textarea {
+  display: block;
+  width: 100%;
+  margin: 6px 0 0;
+  padding: 11px 13px;
+  resize: vertical;
+  min-height: 82px;
+  background: var(--paper);
+  border: 1px solid #97a69b;
+  border-radius: 5px;
+  color: var(--ink);
+  font: 400 16px/1.5 var(--sans);
+}
+.oc-fields textarea[aria-invalid="true"] {
+  border-color: var(--accent);
+}
+.oc-tools,
+.oc-actions,
+.oc-review-buttons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.oc-tools {
+  margin: 8px 0 14px;
+}
+.oc-actions {
+  padding-top: 17px;
+  border-top: 1px solid var(--line);
+  justify-content: flex-end;
+}
+.oc-status {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.oc-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #719076;
+}
+.oc-status.is-dirty::before {
+  background: #b57432;
+}
+.oc-error {
+  color: var(--accent);
+  font-size: 14px;
+}
+.oc-error:not(:empty) {
+  margin: 9px 0;
+}
+.oc-empty,
+.oc-review-card {
+  padding: clamp(18px, 2.3vw, 32px);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f1f4ed;
+}
+.oc-empty > svg {
+  color: var(--green);
+  width: 25px;
+  height: 25px;
+}
+.oc-empty h3,
+.oc-preview h3 {
+  font-size: 18px;
+  margin: 8px 0;
+}
+.oc-review-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.oc-review-id h3,
+.seller-reply h3 {
+  font: 600 15px var(--sans);
+  margin: 0;
+}
+.oc-score {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 15px 0 6px;
+  color: var(--green);
+}
+.oc-score b {
+  font: normal 30px/1.1 var(--display);
+}
+.oc-score span {
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+.oc-comment,
+.seller-reply > p,
+.oc-preview p,
+.about-page .story-lead,
+.about-method > p {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.seller-reply {
+  padding: 13px 17px;
+  border-left: 3px solid #7e9d82;
+  background: #e2e9dd;
+  margin: 16px 0;
+}
+.seller-reply p {
+  margin: 5px 0;
+}
+.seller-reply small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.oc-review-buttons,
+#oc-reply-form {
+  margin-top: 17px;
+}
+.oc-preview p {
+  margin: 5px 0 16px;
+}
+.oc-preview > small {
+  font: 600 12px var(--mono);
+  color: var(--green);
+}
+@media (max-width: 700px) {
+  .oc-heading {
+    display: block;
+  }
+  .oc-public {
+    margin: 5px 0 0;
+    padding-inline: 0;
+  }
+  .oc-actions {
+    justify-content: flex-start;
+  }
+  .oc-status {
+    flex-basis: 100%;
+  }
+  .oc-languages > div {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .oc-lang span {
+    min-height: 42px;
+  }
+  .oc-actions .btn {
+    min-height: 44px;
+  }
+  .oc-tools {
+    gap: 6px;
+  }
+  .oc-tool {
+    padding-inline: 5px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .oc-lang span,
+  .oc-public,
+  .oc-tool {
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+}
+.oc-tool[hidden] {
+  display: none;
+}

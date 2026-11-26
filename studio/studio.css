@@ -1,0 +1,164 @@
+@font-face {
+  font-family: Archivo;
+  src: url("assets/archivo.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+}
+:root {
+  --sans: Archivo, "Helvetica Neue", Arial, sans-serif;
+  --display: var(--sans);
+  --paper: #fcfcfa;
+  --ink: #191b1a;
+  --green: #232724;
+  --accent: #bc301e;
+  --line: #c8cbc4;
+  --muted: #505551;
+  --cream: #fcfcfa;
+  --stage: #eeefeb;
+  --signal: #d8321e;
+  font-family: var(--sans);
+}
+.wrap {width:min(91%,1620px)}
+.mast {height:75px;gap:clamp(15px,2.7vw,48px)}
+.mast nav {gap:clamp(12px,1.6vw,28px)}
+.mast .mast-end {gap:clamp(8px,1.1vw,20px)}
+.studio-brand,.foot .studio-brand {font:790 clamp(24px,2vw,32px)/1 var(--sans);letter-spacing:-.068em;color:var(--ink);gap:.25em}
+.studio-brand svg {width:1.48em;height:.84em;color:var(--signal);flex:none}
+.studio-brand b,.studio-selection h2 b,.studio-garage h2 b {color:var(--signal)}
+.mast nav a[aria-current]::after,.demo-tag::before {background:var(--signal)}
+.lang-trigger,.owner-entry,.lang-panel,.lang-code {border-radius:4px}
+.lang-trigger {border-color:var(--line)}
+.mast .owner-entry:not([aria-current]):not(:hover),.mast .owner-entry,.owner-entry:hover {background:var(--ink);color:white;border-color:var(--ink)}
+.mast nav a[href="#contact"] {font-weight:650}
+.mast .quick-contact {color:var(--ink)}
+.lang-panel,.lang-panel [role="menuitemradio"]{background:var(--paper)}
+.lang-panel [aria-checked="true"],.lang-panel [role="menuitemradio"]:hover,.lang-trigger:hover,.lang-trigger[aria-expanded="true"] {background:var(--stage);color:var(--ink)}
+.lang-panel .lang-code {color:var(--ink);border-color:var(--line)}
+.lang-panel [aria-checked="true"] .lang-code {background:var(--ink);color:white}
+.btn.primary,.gg-shell .btn.primary {background:var(--accent);border-color:var(--accent);color:white}
+.btn.primary:hover,.gg-shell .btn.primary:hover {background:#992619;border-color:#992619}
+.btn,.cc-form,.cc-receipt,.cc-settings,dialog:not(.photo-sheet) {border-radius:4px}
+.btn:not(.primary):hover,.cc-car:hover,.cc-channel:hover,.sheet-nav .menu-owner,.filter-chip,.filters,.review-entry,.cc-form,.cc-settings,.cc-receipt,.about-method,.showcase-slot,.gg-work-nav a:not([aria-current]):hover {background-color:var(--stage)}
+.gg-shell {--gg-ink:var(--ink);--gg-green:var(--ink);--gg-line:var(--line);--gg-paper:var(--paper);--gg-muted:var(--muted)}
+.heading,.page-head h1,.detail-copy h1,.about-story h1,.gg-workspace .gg-heading h1,.gg-heading h1,.cc-layout h1,.cc-form h2,.cc-settings h3,.cc-receipt h2,.oc-heading h2,.showcase-intro h2 {font-family:var(--display);font-weight:690;letter-spacing:-.055em;line-height:1.06}
+.about-story h1 em {font-family:inherit;font-style:normal;color:var(--accent)}
+.gg-shell button,.gg-shell input,.gg-shell select,.gg-shell textarea {font-family:var(--sans)}
+.car-pic,.about-photo,.cm-stage {border-radius:3px}
+.car-tag {background:var(--paper);color:var(--ink)}
+.car-info {padding-top:15px}
+.car-info h3 {font-weight:690}
+.car-card .city {margin-top:8px}
+.car-card .facts {color:var(--muted)}
+.film-tag {background:#202522ed;color:#fff}
+.studio-cover {background:var(--stage);border-bottom:1px solid var(--line)}
+.studio-top,.studio-rail,.studio-links,.studio-arrows,.studio-selection-head,.studio-filters {display:flex;align-items:center}
+.studio-top,.studio-selection-head,.studio-rail {justify-content:space-between;gap:16px}
+.studio-top {padding-top:clamp(23px,2.5vw,40px);font:500 10px/1.45 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.studio-kicker {display:inline-flex;align-items:center;gap:10px;font:650 11px/1.4 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink)}
+.studio-kicker::before {content:"";width:24px;height:3px;transform:skew(-23deg);background:var(--signal)}
+.studio-stage {height:clamp(320px,27.6vw,455px);margin:13px 0 12px;position:relative;isolation:isolate}
+.studio-stage h1 {font:810 clamp(82px,10.2vw,175px)/.98 var(--display);letter-spacing:-.068em;word-spacing:.045em;overflow-wrap:anywhere}
+.studio-stage h1.long-make {font-size:clamp(43px,5.3vw,92px)}
+.studio-caption {position:absolute;z-index:2;top:clamp(104px,10.6vw,180px);left:0;max-width:36%}
+.studio-trim {font-size:clamp(27px,2.65vw,44px);line-height:1.08;font-weight:550;letter-spacing:-.055em;overflow-wrap:anywhere}
+.studio-intro {margin:9px 0 17px;max-width:33ch;font-size:clamp(14px,1.12vw,18px);line-height:1.45;color:var(--muted)}
+.studio-links {gap:9px 17px;flex-wrap:wrap}
+.studio-catalog-link {font-size:13px;font-weight:600;text-decoration:underline;text-underline-offset:4px}
+.studio-car {position:absolute;z-index:1;width:72%;right:-2%;bottom:0;display:block}
+.studio-car img {width:100%;aspect-ratio:1110/349;object-fit:contain}
+.studio-photograph .studio-car {height:85%;width:55%;right:0;border-radius:3px;overflow:hidden}
+.studio-photograph .studio-car img {height:100%;object-fit:contain;background:#e0e2dd}
+.studio-photograph {height:auto;min-height:clamp(330px,27vw,445px);display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:15px}
+.studio-photograph h1,.studio-photograph h1.long-make {font-size:clamp(45px,5.8vw,90px);max-width:42%}
+.studio-photograph .studio-caption {position:static;max-width:42%}
+.studio-rail {padding:15px 0 20px;border-top:1px solid var(--line)}
+.studio-rail dl {display:flex;gap:clamp(24px,4.2vw,76px);margin:0}
+.studio-rail dt {color:var(--muted);font:500 10px/1.4 var(--mono);letter-spacing:.045em;text-transform:uppercase}
+.studio-rail dd {margin:4px 0 0;font-size:clamp(16px,1.35vw,22px);line-height:1.2;font-weight:610;letter-spacing:-.035em}
+.studio-arrows {gap:7px}
+.studio-arrows span {font:500 12px var(--mono);margin-right:10px;white-space:nowrap}
+.studio-arrows button {border:1px solid #a8ada5;width:42px;height:42px;border-radius:50%;display:grid;place-items:center}
+.studio-arrows button:hover {color:white;background:var(--ink)}
+.studio-selection {padding-block:clamp(35px,3.65vw,64px) clamp(37px,4.6vw,82px)}
+.studio-selection-head {margin-bottom:23px}
+.studio-selection h2,.studio-garage h2 {font:690 clamp(42px,4vw,70px)/1.01 var(--display);letter-spacing:-.065em;word-spacing:.035em}
+.studio-filters {gap:5px}
+.studio-filters button {min-height:36px;border:1px solid var(--line);border-radius:30px;padding:7px 15px;font-size:13px;font-weight:570}
+.studio-filters [aria-pressed="true"] {color:white;background:var(--ink);border-color:var(--ink)}
+.studio-all {margin-top:16px}
+.studio-garage {background:#e8eae5}
+.studio-garage>.wrap {display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:clamp(26px,6vw,100px);padding-block:clamp(36px,4.8vw,80px)}
+.studio-garage img {width:100%;height:clamp(250px,28vw,455px);object-fit:cover;border-radius:3px}
+.studio-garage h2 {margin:16px 0;max-width:12ch}
+.studio-garage p {color:var(--muted);max-width:51ch;line-height:1.55;white-space:pre-line;overflow-wrap:anywhere}
+.studio-garage .studio-links {margin-top:21px}
+.studio-draft {margin-top:20px;border-top:1px solid var(--line);padding-top:13px;color:var(--muted)}
+.studio-draft summary {cursor:pointer;font-weight:560;font-size:14px}
+.studio-draft>div {display:flex;gap:8px;flex-wrap:wrap;margin-block:12px 5px}
+.studio-draft p {font-size:13px}
+.studio-model-view {margin-top:10px}
+.studio-plate {width:100%;margin:18px 0}
+@media(max-width:1100px) {
+  .mast .demo-tag {display:none}
+  .studio-links {gap:8px 12px}
+}
+@media(min-width:701px) and (max-width:950px) {
+  .studio-stage {height:312px}
+  .studio-caption {top:98px;max-width:34%}
+  .studio-car {width:68%;bottom:5%}
+  .studio-trim {font-size:26px}
+  .studio-intro {margin-bottom:12px}
+}
+@media(max-width:700px) {
+  .wrap {width:calc(100% - 38px)}
+  .mast {height:63px;gap:8px}
+  .mast .mast-end {gap:7px}
+  .mast .brand-demo {display:none}
+  .mast a.quick-contact {padding:6px 9px;min-height:36px;background:var(--ink);color:white;border-radius:3px;text-decoration:none}
+  .mast .lang-trigger {min-height:36px}
+  .studio-top {padding-top:23px;font-size:9px}
+  .studio-kicker {font-size:10px}
+  .studio-stage,.studio-photograph {height:auto;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);margin:15px 0}
+  .studio-stage h1,.studio-photograph h1 {font-size:clamp(48px,13.2vw,93px);max-width:100%}
+  .studio-stage h1.long-make {font-size:clamp(34px,8vw,60px)}
+  .studio-caption,.studio-photograph .studio-caption {display:contents}
+  .studio-trim {font-size:clamp(22px,4.8vw,30px);margin-top:3px}
+  .studio-intro {display:none}
+  .studio-car,.studio-photograph .studio-car {position:static;order:2;width:100%;height:auto;margin:12px 0 9px}
+  .studio-photograph .studio-car img {aspect-ratio:2.5;max-height:210px}
+  .studio-stage .studio-links {order:3;gap:5px 12px;padding-right:110px}
+  .studio-stage .btn {min-height:39px;padding:8px 12px;font-size:13px}
+  .studio-catalog-link {font-size:12px}
+  .studio-rail {position:relative;padding:12px 0 16px}
+  .studio-rail dl {width:100%;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  .studio-rail dt {font-size:9px;letter-spacing:0;overflow-wrap:anywhere}
+  .studio-rail dd {font-size:15px}
+  .studio-arrows {position:absolute;bottom:calc(100% + 16px);right:0;gap:4px}
+  .studio-arrows span {margin-right:2px;font-size:10px}
+  .studio-arrows button {width:34px;height:34px}
+  .studio-selection-head {align-items:flex-start;flex-direction:column;gap:16px;margin-bottom:17px}
+  .studio-selection h2 {font-size:42px}
+  .studio-garage>.wrap {grid-template-columns:1fr;gap:23px}
+  .studio-garage img {height:auto;aspect-ratio:2.15}
+  .studio-garage h2 {font-size:44px}
+}
+@media(max-width:410px){
+  .wrap {width:calc(100% - 30px)}
+  .mast .studio-brand {font-size:clamp(17px,5.6vw,23px)}
+  .mast .mast-end {gap:3px}
+  .studio-rail dd {font-size:14px}
+  .studio-rail dl {grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px}
+  .studio-top {gap:5px}
+  .studio-rail dt {font-size:8.8px}
+}
+
+@media(max-width:360px) {
+  .mast {gap:4px}
+  .mast .mobile-nav {width:34px;min-width:34px}
+  .mast a.quick-contact {padding-inline:6px}
+  .mast .lang-trigger {min-width:32px;gap:3px}
+  .mast .studio-brand {font-size:17px}
+  .mast .studio-brand svg {width:1.25em}
+}

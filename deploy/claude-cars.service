@@ -1,0 +1,23 @@
+[Unit]
+Description=Claude Cars
+After=network.target
+
+[Service]
+Type=simple
+User=claude-cars
+WorkingDirectory=/opt/claude-cars
+EnvironmentFile=/etc/claude-cars.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/claude-cars/.venv/bin/python serve.py --data-dir /var/lib/claude-cars
+Restart=on-failure
+RestartSec=5
+StateDirectory=claude-cars
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
