@@ -78,7 +78,23 @@ async function api(path,method='GET',body){
         return {id:body.id};
       }
       const lead=state.leads.find(l=>l.id===id);if(!lead||lead.revision!==body.revision)throw new Error('conflict');
-      Object.assign(lead,{status:body.status,revision:lead.revision+1,bookedAt:body.status==='booked'?Date.now():null});return {lead};
+      if(method==='DELETE'){
+        state.leads=state.leads.filter(item=>item.id!==id);
+        return {};
+      }
+      if(!['new','replied','booked'].includes(body.status))throw new Error('failure');
+      if(body.fields){
+        Object.assign(lead.fields,body.fields);
+        if(lead.car!==body.car){
+          lead.car=body.car;
+          const car=state.cars.find(item=>item.id===body.car);
+          lead.title=car?car.make+' '+car.model:'';
+        }
+      }
+      if(lead.status!==body.status)lead.bookedAt=body.status==='booked'?Date.now():null;
+      lead.status=body.status;
+      lead.revision+=1;
+      return {lead};
     }
     throw new Error('notfound');
   });

@@ -1,6 +1,18 @@
 (() => {
   'use strict';
   const rows = {
+    crmTitle: ["Suivi des clients", "Klantopvolging", "Kundenkontakte", "Customer follow-up", "Seguimiento de clientes"],
+    crmIntro: ["Retrouvez les coordonnées de chaque client et indiquez où en est votre échange.", "Bekijk de contactgegevens en houd bij wie u hebt beantwoord.", "Hier finden Sie die Kontaktdaten und den Stand jedes Gesprächs.", "Keep contact details and track what happens after each enquiry.", "Consulta los datos de cada cliente y registra cómo avanza la conversación."],
+    crmNext: ["Contactez le client, puis marquez votre réponse ici.", "Neem contact op en markeer het contact daarna als beantwoord.", "Kontaktieren Sie den Kunden und markieren Sie die Anfrage anschließend als beantwortet.", "Contact the customer, then mark this enquiry as replied.", "Contacta con el cliente y marca la consulta como respondida."],
+    crmReplied: ["Une fois le rendez-vous convenu avec le client, confirmez la visite ici.", "Bevestig het bezoek hier zodra de afspraak vaststaat.", "Bestätigen Sie hier die Besichtigung, sobald der Termin vereinbart ist.", "Once you agree a time with the customer, confirm the viewing here.", "Cuando acordéis una cita, confirma aquí la visita."],
+    crmBooked: ["Visite convenue. Si les plans changent, modifiez le statut.", "Bezoek afgesproken. Wijzig de status als de plannen veranderen.", "Besichtigung vereinbart. Bei Änderungen können Sie den Status anpassen.", "Viewing agreed. You can change the status if plans change.", "Visita acordada. Puedes cambiar el estado si cambian los planes."],
+    crmEdit: ["Modifier le contact", "Contact bewerken", "Kontakt bearbeiten", "Edit contact", "Editar contacto"],
+    crmDelete: ["Supprimer le contact", "Contact verwijderen", "Kontakt löschen", "Delete contact", "Eliminar contacto"],
+    crmConfirm: ["Supprimer définitivement cette fiche ?", "Dit contact definitief verwijderen?", "Diesen Kontakt endgültig löschen?", "Permanently delete this contact?", "¿Eliminar este contacto definitivamente?"],
+    crmNextStep: ["Prochaine étape", "Volgende stap", "Nächster Schritt", "Next step", "Siguiente paso"],
+    crmStatus: ["Statut", "Status", "Status", "Status", "Estado"],
+    crmOpen: ["Ouvrir la fiche", "Contact openen", "Kontakt öffnen", "Open contact", "Abrir ficha"],
+
     stockChanged: ['La disponibilité de cette voiture a changé. Actualisez-la pour reprendre votre demande.', 'De beschikbaarheid van deze auto is gewijzigd. Vernieuw de gegevens om verder te gaan.', 'Die Verfügbarkeit dieses Fahrzeugs hat sich geändert. Rufen Sie den aktuellen Stand ab, um fortzufahren.', 'This car’s availability has changed. Check its current status to continue your enquiry.', 'La disponibilidad de este coche ha cambiado. Comprueba su estado para continuar la consulta.'],
     refreshStock: ['Vérifier la disponibilité', 'Beschikbaarheid bekijken', 'Verfügbarkeit prüfen', 'Check availability', 'Comprobar disponibilidad'],
     filterStatus: ['Filtrer les demandes par statut', 'Aanvragen filteren op status', 'Anfragen nach Status filtern', 'Filter enquiries by status', 'Filtrar consultas por estado'],

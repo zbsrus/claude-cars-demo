@@ -698,7 +698,7 @@
             key === 'listingUrl' && httpURL(value)
               ? `<a href="${esc(value)}" target="_blank" rel="noopener noreferrer">${esc(value)} ↗</a>`
               : esc(fieldValue(key, value));
-          return `<div><dt>${esc(t[detailLabels[key] || key])}</dt><dd>${display}</dd></div>`;
+          return `<div class="crm-fact-text"><dt>${esc(t[detailLabels[key] || key])}</dt><dd>${display}</dd></div>`;
         })
         .join('');
       const undo =
@@ -710,7 +710,18 @@
       const car = findCar(lead.car);
       const dossier = car?.status === 'draft' ? makeOwnerURL('edit',{car:lead.car}) : carURL(lead.car);
       const appointment = !selected && lead.fields.date ? `<p class="ins-appointment"><strong>${t.requestedTime}</strong> · ${esc(fieldValue('date',lead.fields.date))}</p>` : '';
-      return `<article class="ins-lead${selected === lead.id ? ' is-selected' : ''}" id="ins-lead-${esc(lead.id)}" tabindex="-1"><div class="ins-lead-heading"><h2>${esc(leadName)}</h2><span aria-live="polite">${t[status]}</span></div><p class="ins-lead-meta">${esc([t[lead.type === 'manual' ? 'ownWhats' : lead.type], lead.lang?.toUpperCase(), dateFormat.format(lead.time), lead.buyerUpdatedAt ? t.buyerUpdated : ''].filter(Boolean).join(' · '))}</p>${lead.title ? `<p class="ins-lead-car">${car ? `<a class="ins-back" href="${esc(dossier)}">${esc(lead.title)}</a>` : esc(lead.title)}</p>` : ''}${appointment}${selected ? `<dl class="ins-lead-data">${reach}${details}</dl>` : ''}<div class="ins-actions">${selected ? '' : `<a class="ins-text-btn" href="${esc(detailURL)}">${t.openRequest}</a>`}${status === 'new' ? `<button type="button" class="ins-secondary" data-state="replied" data-lead="${esc(lead.id)}">${t.markReply}</button>` : ''}${status !== 'booked' ? `<button type="button" class="ins-secondary" data-state="booked" data-lead="${esc(lead.id)}">${t.markBooked}</button>` : ''}${undo}${reopen}</div>${selected && lead.car ? `<a class="ins-back" href="${esc(carStatsURL)}">${t.viewStats}</a>` : ''}</article>`;
+      if (selected) {
+        const meta = [t[lead.type === 'manual' ? 'ownWhats' : lead.type], lead.lang?.toUpperCase(), dateFormat.format(lead.time), lead.buyerUpdatedAt ? t.buyerUpdated : ''].filter(Boolean).join(' · ');
+        const carField = lead.title ? `<div><dt>${t.car}</dt><dd>${car ? `<a href="${esc(dossier)}">${esc(lead.title)}</a>` : esc(lead.title)}</dd></div>` : '';
+        const transition = (next,label,primary) => `<button type="button" class="${primary?'ins-primary':'ins-secondary'}" data-state="${next}" data-lead="${esc(lead.id)}">${label}</button>`;
+        return `<article class="ins-lead crm-record" id="ins-lead-${esc(lead.id)}" tabindex="-1">
+          <header class="crm-identity"><div class="crm-name"><div class="crm-title-row"><h1>${esc(leadName)}</h1><span class="crm-state crm-state-${status}" aria-live="polite">${t[status]}</span></div><p>${esc(meta)}</p></div><button type="button" class="ins-secondary" data-edit-contact>${t.crmEdit}</button></header>
+          <dl class="crm-facts">${reach}${carField}${details}</dl>
+          <section class="crm-follow"><h2>${t.crmNextStep}</h2><p>${status==='new'?t.crmNext:status==='replied'?t.crmReplied:t.crmBooked}</p><div class="ins-actions">${status==='new'?transition('replied',t.markReply,true):''}${status!=='booked'?transition('booked',t.markBooked,status==='replied'):''}${undo}${reopen}</div></section>
+          <footer class="crm-controls">${lead.car?`<a href="${esc(carStatsURL)}">${t.viewStats}</a>`:''}<button type="button" class="ins-text-btn" data-delete-contact>${t.crmDelete}</button></footer>
+        </article>`;
+      }
+      return `<article class="ins-lead${selected === lead.id ? ' is-selected' : ''}" id="ins-lead-${esc(lead.id)}" tabindex="-1"><div class="ins-lead-heading"><h2>${esc(leadName)}</h2><span aria-live="polite">${t.crmStatus} · ${t[status]}</span></div><p class="ins-lead-meta">${esc([t[lead.type === 'manual' ? 'ownWhats' : lead.type], lead.lang?.toUpperCase(), dateFormat.format(lead.time), lead.buyerUpdatedAt ? t.buyerUpdated : ''].filter(Boolean).join(' · '))}</p>${lead.title ? `<p class="ins-lead-car">${car ? `<a class="ins-back" href="${esc(dossier)}">${esc(lead.title)}</a>` : esc(lead.title)}</p>` : ''}${appointment}${selected ? `<dl class="ins-lead-data">${reach}${details}</dl>` : ''}<p class="ins-appointment">${status === "new" ? t.crmNext : status === "replied" ? t.crmReplied : t.crmBooked}</p><div class="ins-actions">${selected ? '' : `<a class="ins-text-btn" href="${esc(detailURL)}">${t.crmOpen}</a>`}${status === 'new' ? `<button type="button" class="ins-secondary" data-state="replied" data-lead="${esc(lead.id)}">${t.markReply}</button>` : ''}${status !== 'booked' ? `<button type="button" class="ins-secondary" data-state="booked" data-lead="${esc(lead.id)}">${t.markBooked}</button>` : ''}${undo}${reopen}</div>${selected && lead.car ? `<a class="ins-back" href="${esc(carStatsURL)}">${t.viewStats}</a>` : ''}</article>`;
     }
     let stored = readManualDraft();
     const saved = stored && data.leads.find(lead => lead.id === stored.id);
@@ -719,7 +730,7 @@
     const manualForm = selected ? '' : `<details class="ins-manual" ${stored ? 'open' : ''}><summary>${t.manual}</summary><form data-manual novalidate><p class="ins-instruction">${stored ? t.manualResumed : t.requiredFields}</p><div class="ins-pair">${field('name', t.ownerName, valuesBefore.name || '', 'required')}${field('reach', t.reach, valuesBefore.reach || '', 'required')}</div>${carSelect(valuesBefore.car || '', 'question')}${field('note', t.note, valuesBefore.note || '', '', true)}<div class="ins-actions"><button class="ins-primary" type="submit">${t.add}</button><button class="ins-text-btn" type="button" data-forget-manual ${stored ? '' : 'hidden'}>${t.clearDraft}</button></div><p class="ins-error" data-manual-status role="status"></p></form></details>`;
     const group = [kind && t[kind === 'manual' ? 'ownWhats' : kind], fromStats && contextCar && title(findCar(contextCar)),
       fromStats && t[period === 'all' ? 'all' : period === '7' ? 'seven' : 'thirty']].filter(Boolean).join(' · ');
-    panel.innerHTML = `<div class="ins-dashboard">${contextLinks}<div class="ins-report-head"><div><h1>${selected ? t.enquiryDetail : t.enquiries}</h1>${group ? `<p>${esc(group)}</p>` : ''}<p>${t.inboxNote}</p></div></div>${manualForm}${filters}<p class="ins-error" data-inbox-status role="status">${saved ? `<a href="${esc(makeOwnerURL('enquiries',{lead:saved.id}))}">${t.contactSaved} →</a>` : ''}</p><div class="ins-leads">${rows.length ? rows.map(row).join('') : `<p>${selected ? t.missingLead : filter || kind ? t.noMatching : t.noRequests}</p>`}</div></div>`;
+    panel.innerHTML = `<div class="ins-dashboard">${contextLinks}${selected && rows.length ? '' : `<div class="ins-report-head"><div><h1>${selected ? t.enquiryDetail : t.crmTitle}</h1>${group ? `<p>${esc(group)}</p>` : ''}<p>${t.crmIntro}</p></div></div>`}${manualForm}${filters}<p class="ins-error" data-inbox-status role="status">${saved ? `<a href="${esc(makeOwnerURL('enquiries',{lead:saved.id}))}">${t.contactSaved} →</a>` : ''}</p><div class="ins-leads">${rows.length ? rows.map(row).join('') : `<p>${selected ? t.missingLead : filter || kind ? t.noMatching : t.noRequests}</p>`}</div></div>`;
     const output = panel.querySelector('[data-inbox-status]');
     const manual = panel.querySelector('[data-manual]');
     const manualErrors = () => {
@@ -765,9 +776,7 @@
           id: manualId, type: 'manual', lang, car, fields: {name, reach, note},
         });
         clearManualDraft();
-        if (fromStats || kind || filter && filter !== 'new') {
-          location.assign(makeOwnerURL('enquiries', {lead:manualId}));
-        } else await refresh(manualId);
+        location.assign(makeOwnerURL('enquiries', {lead:manualId}));
       } catch (error) {
         const status = manual.querySelector('[data-manual-status]');
         if (error.message === 'session') status.textContent = window.CCOwnerLocales.t('session',lang);
@@ -783,6 +792,74 @@
         button.disabled = false;
       }
     };
+    const contact = selected && rows[0];
+    if (contact) {
+      const card = panel.querySelector('.ins-lead');
+      const ownerText = key => window.CCOwnerLocales.t(key,lang);
+      const edit = card.querySelector('[data-edit-contact]');
+      const remove = card.querySelector('[data-delete-contact]');
+      const endpoint = '/api/owner/enquiries/' + encodeURIComponent(contact.id);
+      edit.onclick = () => {
+        if (card.querySelector('form')) return;
+        const currentState = states.includes(contact.status) ? contact.status : 'new';
+        const statusOptions = states.map(state => `
+          <label class="crm-choice crm-state-${state}">
+            <input type="radio" name="status" value="${state}" ${state === currentState ? 'checked' : ''}>
+            ${esc(t[state])}
+          </label>`).join('');
+        card.insertAdjacentHTML('beforeend', `
+          <form class="crm-editor" data-contact-editor aria-labelledby="crm-edit-title" novalidate>
+            <h2 id="crm-edit-title">${t.crmEdit}</h2>
+            <div class="crm-editor-fields">
+              ${field('name', t.ownerName, contact.fields.name, 'required')}
+              ${field('reach', t.reach, contact.fields.reach, 'required')}
+              ${carSelect(contact.car, 'question')}
+              ${field('note', t.note, contact.fields.note || '', '', true)}
+            </div>
+            <fieldset class="crm-status-options">
+              <legend>${t.crmStatus}</legend>
+              <div class="crm-choices">${statusOptions}</div>
+            </fieldset>
+            <p role="alert" class="ins-error"></p>
+            <div class="ins-actions">
+              <button type="submit" class="ins-primary">${ownerText('save')}</button>
+              <button type="button" class="ins-secondary" data-cancel-edit>${ownerText('cancel')}</button>
+            </div>
+          </form>`);
+        const form = card.querySelector('form');
+        const editErrors = () => {
+          const {name, reach} = values(form);
+          return {name: name ? '' : t.required, reach: validContact(reach) ? '' : t.reachError};
+        };
+        clearFixedErrors(form, editErrors);
+        if (contact.car && !form.elements.car.value) form.elements.car.add(new Option(contact.title || contact.car,contact.car,true,true));
+        card.classList.add('crm-editing');
+        form.elements.name.focus();
+        form.querySelector('[data-cancel-edit]').onclick = () => {
+          form.remove(); card.classList.remove('crm-editing'); edit.focus();
+        };
+        form.onsubmit = async event => {
+          event.preventDefault();
+          const {name,reach,note,car,status} = values(form);
+          if (submitting || !validation(form, editErrors())) return;
+          submitting=true;
+          try {
+            await api(endpoint,'PUT',{revision:contact.revision,status,car,fields:{name,reach,note}});
+            await refresh(contact.id);
+          } catch (err) {form.querySelector('[role=alert]').textContent=err.message==='conflict'?t.reloadRequest:t.sendError;}
+          finally { submitting=false; }
+        };
+      };
+      remove.onclick = async () => {
+        if (submitting || !window.confirm(contact.fields.name+' — '+t.crmConfirm)) return;
+        submitting=true;
+        try {
+          await api(endpoint,'DELETE',{revision:contact.revision});
+          location.replace(makeOwnerURL('enquiries',statusQuery));
+        } catch(err) {output.textContent=err.message==='conflict'?t.reloadRequest:t.sendError;}
+        finally {submitting=false;}
+      };
+    }
     panel.querySelectorAll('[data-state],[data-undo]').forEach((button) => {
       button.onclick = async () => {
         if (submitting) return;

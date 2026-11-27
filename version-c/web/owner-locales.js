@@ -120,7 +120,7 @@
     ],
     catalogue: ["Annonces", "Advertenties", "Inserate", "Listings", "Anuncios"],
     stats: ["Statistiques", "Statistieken", "Statistik", "Statistics", "Estadísticas"],
-    enquiries: ["Demandes", "Aanvragen", "Anfragen", "Enquiries", "Consultas"],
+    enquiries: ["Suivi des clients", "Klantopvolging", "Kundenkontakte", "Customer follow-up", "Seguimiento de clientes"],
     listingsTitle: ["Mes annonces", "Mijn advertenties", "Meine Inserate", "My listings", "Mis anuncios"],
     published: ["Publiées", "Gepubliceerd", "Veröffentlicht", "Published", "Publicados"],
     drafts: ["Brouillons", "Concepten", "Entwürfe", "Drafts", "Borradores"],
