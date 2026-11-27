@@ -234,13 +234,13 @@
       'Contactar con Claude',
     ],
     contactIntro: [
-      'Une question sur une voiture, une envie précise ou un rendez-vous au garage à Wanze.',
+      'Une question sur une voiture, une envie précise ou un rendez-vous à Wanze.',
       'Een vraag over een auto, een specifieke zoekwens of een afspraak in Wanze.',
       'Fragen zu einem Wagen, ein Suchwunsch oder ein Besuch in Wanze.',
       'Ask about a car, tell Claude what you are looking for or arrange a visit to Wanze.',
       'Pregunta por un coche, cuéntale a Claude qué buscas o acuerda una visita en Wanze.',
     ],
-    contactDetails: ['Au garage', 'In de garage', 'In der Garage', 'At the garage', 'En el garaje'],
+    contactDetails: ['Visites à Wanze', 'Bezoek in Wanze', 'Besichtigungen in Wanze', 'Viewings in Wanze', 'Visitas en Wanze'],
     byAppointment: [
       'Visites uniquement sur rendez-vous, sept jours sur sept.',
       'Bezoek uitsluitend op afspraak, zeven dagen per week.',

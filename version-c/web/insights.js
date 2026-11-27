@@ -32,7 +32,6 @@
   const findCar = (carId) => cars().find((c) => c.id === carId);
   const canViewCar = (car) => car?.status === 'available';
   const carURL = (car) => location.origin + window.CCDemo.carPath(car,lang);
-  const waURL = (message) => `https://wa.me/32496807976?text=${encodeURIComponent(message)}`;
   const dateKey = (time) => dayFormat.format(time);
   const dayNumber = (key) => Math.floor(Date.parse(key + 'T00:00:00Z') / 86400000);
   const asDay = (num) => num * 86400000;
@@ -236,27 +235,14 @@
     const contextual = !!originCar || types.includes(query.get('type'));
     const titleKey = () => contextual ? draft.type : 'contactPage';
     const introKey = () => contextual ? ({ question: 'questionIntro', viewing: 'viewingIntro', sourcing: 'sourcingIntro', import: 'importIntro' })[draft.type] : 'contactIntro';
-    root.innerHTML = `<div class="ins-contact"><header class="ins-contact-cover"><div class="cc-wrap ins-contact-intro">${back}<div class="ins-contact-lead"><h1>${t[titleKey()]}</h1><p>${t[introKey()]}</p></div></div></header><div class="cc-wrap ins-contact-grid"><section id="ins-formbox" class="ins-formbox"></section><aside class="ins-address"><h2>${t.contactDetails}</h2><address>Claude C SRL<br>Chaussée de Tirlemont 28/3<br>4520 Wanze · ${t.belgium}</address><a href="https://www.google.com/maps/dir/?api=1&amp;destination=Chauss%C3%A9e+de+Tirlemont+28%2F3%2C+4520+Wanze%2C+Belgium" referrerpolicy="no-referrer">${esc(window.CCPublicWords.directions[lang])}</a><p>${t.byAppointment}</p><div class="ins-actions ins-direct"><a class="ins-primary" data-ins-whats data-cc-event="whatsapp" target="_blank" rel="noopener noreferrer" href="${esc(waURL(t.hello))}">WhatsApp ↗</a><a class="ins-secondary" data-ins-phone data-cc-event="phone" href="tel:+32496807976">+32 496 80 79 76</a></div><a href="mailto:mcsportcars17@gmail.com">mcsportcars17@gmail.com</a><small>${t.vat} BE0681982155</small></aside></div></div>`;
-    if (!contextual) root.querySelector('.ins-contact-intro').append(root.querySelector('.ins-direct'));
+    root.innerHTML = `<div class="ins-contact"><header class="ins-contact-cover"><div class="cc-wrap ins-contact-intro">${back}<div class="ins-contact-lead"><h1>${t[titleKey()]}</h1><p>${t[introKey()]}</p></div></div></header><div class="cc-wrap ins-contact-grid"><section id="ins-formbox" class="ins-formbox"></section><aside class="ins-address"><h2>${t.contactDetails}</h2>
+      <address>Wanze · ${t.belgium}</address><p>${t.byAppointment}</p>
+      <a href="/claude-cars-demo/version-c/${lang}/privacy/">${t.privacy}</a></aside></div></div>`;
+
     const box = document.getElementById('ins-formbox');
-    const directWhats = root.querySelector('[data-ins-whats]');
     function associatedCar() {
       return draft.type === 'import' ? null : findCar(draft.car);
     }
-    function updateDirectLink() {
-      const car = associatedCar();
-      const message = [
-        t.hello,
-        car ? t[draft.type] + ' · ' + title(car) : t[requestPhrases[draft.type]],
-        draft.type === 'question' && car === originCar ? presetQuestion : '',
-        car ? carURL(car.id) : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
-      directWhats.href = waURL(message);
-      for (const link of root.querySelectorAll('.ins-direct [data-cc-event]')) link.dataset.ccCar = car?.id || '';
-    }
-    updateDirectLink();
     function capture() {
       const form = box.querySelector('form');
       if (form) draft = { ...draft, ...values(form) };
@@ -311,7 +297,6 @@
       focusField(box.querySelector('select'));
     }
     function showReceipt(request) {
-      directWhats.hidden = true;
       receipt = request;
       prepared = hasInput = false;
       box.innerHTML = `<h2 tabindex="-1">${t.received}</h2><p>${t.receivedNote}</p>
@@ -322,17 +307,15 @@
     }
     function showPrepared() {
       prepared = true;
-      directWhats.hidden = true;
       const request = lead();
       const msg = buildMessage(request);
       const buttonLabel = () => attemptedVersion === submission.version ? t.retrySend :
         uncertain ? t.sendCorrection : t.siteSend;
       const recoveryNote = attemptedVersion === submission.version ? t.deliveryUncertain : t.correctionNote;
       box.innerHTML = `<h2 tabindex="-1">${t.prepared}</h2><div class="ins-message">${esc(msg)}</div>
-        <p class="ins-note">${t.handoff} <a href="/claude-cars-demo/version-c/${lang}/privacy" target="_blank" rel="noopener">${t.privacy}</a></p>
+        <p class="ins-note">${window.CCLegal.get("demoForms", lang)} <a href="/claude-cars-demo/version-c/${lang}/privacy" target="_blank" rel="noopener">${t.privacy}</a></p>
         <p class="ins-error" role="alert">${uncertain ? recoveryNote : ''}</p>
         <div class="ins-actions"><button type="button" class="ins-primary" data-send>${buttonLabel()}</button>
-        <a class="ins-secondary" data-cc-event="whatsapp" data-cc-car="${esc(request.car)}" target="_blank" rel="noopener noreferrer" href="${esc(waURL(msg))}">${t.openWhats} ↗</a>
         <button type="button" data-edit class="ins-text-btn">${t.edit}</button>
         <button type="button" data-refresh-stock class="ins-secondary" hidden>${t.refreshStock}</button></div>`;
       const send = box.querySelector('[data-send]');
@@ -358,7 +341,6 @@
       box.querySelector('h2').focus();
     }
     function draw() {
-      directWhats.hidden = hasInput || uncertain;
       const kind = draft.type;
       root.querySelector('.ins-contact-lead h1').textContent = t[titleKey()];
       root.querySelector('.ins-contact-lead p').textContent = t[introKey()];
@@ -366,7 +348,7 @@
         draft.model = title(findCar(draft.car));
       const showCar = kind !== 'import' && (kind !== 'sourcing' || !!draft.car || !!originCar);
       const viewingNote = kind === viewingFallback ? (kind === 'question' ? t.availabilityNote : t.stockUnavailable) : '';
-      box.innerHTML = `<form novalidate>${returning ? `<p class="ins-draft-note" role="status">${t.resumed}</p>` : ''}${uncertain ? `<p class="ins-note">${t.correctionNote}</p>` : ''}<p class="ins-instruction">${t.requiredFields}</p>${viewingNote ? `<p class="ins-note">${viewingNote}</p>` : ''}<div class="ins-field"><label for="ins-type">${t.type}</label><select id="ins-type" name="type">${availableTypes.map((k) => option(k, t[k], kind)).join('')}</select></div>
+      box.innerHTML = `<form novalidate>${returning ? `<p class="ins-draft-note" role="status">${t.resumed}</p>` : ''}${uncertain ? `<p class="ins-note">${t.correctionNote}</p>` : ''}<p class="ins-note">${window.CCLegal.get("demoForms", lang)}</p><p class="ins-instruction">${t.requiredFields}</p>${viewingNote ? `<p class="ins-note">${viewingNote}</p>` : ''}<div class="ins-field"><label for="ins-type">${t.type}</label><select id="ins-type" name="type">${availableTypes.map((k) => option(k, t[k], kind)).join('')}</select></div>
       ${showCar ? carSelect(draft.car, kind) : ''}
       ${kind === 'viewing' ? `<p class="ins-note">${t.appointmentNote} ${t.dateLocal}.</p>${field('date', t.date, draft.date, `type="datetime-local" min="${wallTime()}"`)}` : ''}
       ${
@@ -385,12 +367,10 @@
       form.addEventListener('input', () => {
         lastEdited = Date.now();
         hasInput = true;
-        directWhats.hidden = true;
         clear.hidden = uncertain;
       });
       clear.onclick = () => { if (window.confirm(t.clearPrompt)) startAgain(); };
       if (form.elements.car) draft.car = form.elements.car.value;
-      updateDirectLink();
       if (form.elements.car)
         form.elements.car.onchange = () => {
           const previous = title(findCar(draft.car));
@@ -398,7 +378,6 @@
           if (kind === 'sourcing' && (!form.elements.model.value || form.elements.model.value === previous)) {
             form.elements.model.value = title(findCar(draft.car));
           }
-          updateDirectLink();
         };
       form.elements.type.onchange = () => {
         capture();

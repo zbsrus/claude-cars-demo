@@ -26,8 +26,8 @@
     privacyRights: ["title", "privacyRights"], privacyRightsText: ["text", "privacyRights"]
   };
   const contacts = {
-    phone: "+32 496 80 79 76", whatsapp: "+32 496 80 79 76", email: "mcsportcars17@gmail.com",
-    address: "Chaussée de Tirlemont 28/3\n4520 Wanze, Belgique", facebook: "https://www.facebook.com/people/Claude-C/61566785224862/",
+    phone: "", whatsapp: "", email: "",
+    address: "", facebook: "https://www.facebook.com/people/Claude-C/61566785224862/",
     company: "Claude C SRL", vat: "BE 0681.982.155"
   };
   const limits = {phone: 40, whatsapp: 40, email: 254, address: 400, facebook: 2048, company: 400, vat: 80,

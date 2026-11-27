@@ -5,7 +5,7 @@
   const { lang, page, cars = [] } = state;
   const names = { fr: "Français", nl: "Nederlands", de: "Deutsch", en: "English", es: "Español" };
   const regions = { fr: "fr-BE", nl: "nl-BE", de: "de-DE", en: "en-GB", es: "es-ES" };
-  const t = (key) => window.CCPublicWords[key]?.[lang] || "";
+  const t = (key) => window.CCPublicWords[key]?.[lang] || window.CCLegal.get(key, lang);
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[c]);
@@ -130,11 +130,12 @@
     });
   }
   function footer() {
+    const {company, vat} = window.CCLegal.business(state);
     document.getElementById("foot").innerHTML = '<div class="cc-wrap cc-foot"><div>' + brand() +
-      '<address>Chaussée de Tirlemont 28/3<br>4520 Wanze, ' + t("location").split(", ")[1] + '</address><a href="https://www.google.com/maps/dir/?api=1&amp;destination=Chauss%C3%A9e+de+Tirlemont+28%2F3%2C+4520+Wanze%2C+Belgium" referrerpolicy="no-referrer">' + t("directions") + '</a></div><div class="cc-foot-links">' +
-      navLinks([["cars","cars"],serviceRoute,["about","about"],["contact","contact"],["privacy","privacy"]]) + '</div><div class="cc-foot-links"><p>' + t("appointment") + '</p>' +
-      '<a data-cc-event="phone" href="tel:+32496807976">+32 496 80 79 76</a><a href="mailto:mcsportcars17@gmail.com">mcsportcars17@gmail.com</a></div></div>' +
-      '<div class="cc-wrap cc-foot-legal">Claude C SRL · BE 0681.982.155</div>';
+      '<p>' + t("location") + '</p></div><div class="cc-foot-links">' +
+      navLinks([["cars","cars"],serviceRoute,["about","about"],["contact","contact"]]) + '</div><div class="cc-foot-links"><p>' + t("appointment") + '</p>' +
+      navLinks([["privacy","privacy"],["legal","legal"]]) + '</div></div>' +
+      '<div class="cc-wrap cc-foot-legal">' + (window.CCDemo ? t("demoTitle") : esc(company + " · " + vat)) + '</div>';
   }
   function photo(src, alt, className = "", highPriority = false, sizes = "100vw") {
     if(src?.startsWith("/media/demo-")) return '<img class="' + esc(className) + '" src="' + esc(window.CCDemo.asset(src)) + '" alt="' + esc(alt) + '" decoding="async">';
@@ -307,7 +308,7 @@
     const ratings = [1, 2, 3, 4, 5].map(score =>
       '<label><input type="radio" name="rating" value="' + score + '" required aria-label="' + score + '/5">' + star + '</label>').join("");
     return '<section id="feedback" class="cc-feedback" tabindex="-1" aria-labelledby="cc-feedback-title"><div class="cc-wrap cc-feedback-inner">' +
-      '<div><h2 id="cc-feedback-title" class="cc-section-title">' + t("feedbackTitle") + '</h2><p class="cc-prose">' + t("feedbackIntro") + '</p></div>' +
+      '<div><h2 id="cc-feedback-title" class="cc-section-title">' + t("feedbackTitle") + '</h2><p class="cc-prose">' + t("demoForms") + '</p></div>' +
       '<div><form class="cc-feedback-form"><fieldset><legend>' + t("feedbackRating") + '</legend><div class="cc-feedback-stars">' + ratings + '</div></fieldset>' +
       '<label for="cc-feedback-comment">' + t("feedbackComment") + '</label><textarea id="cc-feedback-comment" name="comment" rows="3" maxlength="500" aria-describedby="cc-feedback-hint" placeholder="' + esc(t("feedbackPrompt")) + '"></textarea>' +
       '<p id="cc-feedback-hint" class="cc-feedback-hint">' + t("feedbackNoDetails") + '</p><label class="cc-feedback-permission" hidden><input type="checkbox" name="permission"> <span>' + t("feedbackPermission") + '</span></label>' +
@@ -322,7 +323,7 @@
     const button = form.querySelector("button[type=submit]");
     const message = form.parentElement.querySelector(".cc-feedback-message");
     const sync = () => {
-      consent.hidden = !comment.value.trim();
+      consent.hidden = true;
       if (consent.hidden) permission.checked = false;
     };
     comment.addEventListener("input", sync);
@@ -409,9 +410,8 @@
   }
   function vehicle(car) {
     const shareUrl = new URL(carPath(car),location.origin);
-    const wa = "https://wa.me/32496807976?text=" + encodeURIComponent(t("greeting") + " " + carName(car) + ".\n" + shareUrl.href);
     const [nextUrl, nextLabel] = nextCarAction(car);
-    const actions = button(nextUrl, nextLabel) + (car.status !== "sold" ? '<a class="cc-button cc-button-outline" aria-label="' + t("ask") + '" data-cc-event="whatsapp" data-cc-car="' + esc(car.id) + '" href="' + esc(wa) + '">' + icon("message") + 'WhatsApp</a>' : '');
+    const actions = button(nextUrl, nextLabel);
     const carPassUrl = documentUrl(car.carpass);
     const jumps = ["history","condition","documents"].filter(key => details(car,key).text || (key === "documents" && carPassUrl))
       .map(key => '<a href="#cc-' + key + '">' + t(key) + '</a>').join("");
@@ -421,12 +421,11 @@
       '<h1 id="cc-vehicle-title">' + splitName(car) + '</h1>' + (price(car) ? '<p class="cc-summary-price">' + esc(price(car)) + '</p>' : "") +
       '<dl class="cc-specs"><div><dt>' + t("year") + '</dt><dd>' + esc(car.year) + '</dd></div><div><dt>' + t("km") + '</dt><dd>' + esc(km(car.km)) +
       '</dd></div></dl><div class="cc-buy-actions">' + actions + '</div></div><div class="cc-vehicle-media">' + gallery(car) + '</div><div class="cc-vehicle-tools"><div class="cc-seller-inline"><span>' + icon("location") + t("location") + '</span>' +
-      '<span>' + t("appointment") + '</span></div><div class="cc-vehicle-contact"><a class="cc-number" href="tel:+32496807976" data-cc-event="phone" data-cc-car="' + esc(car.id) +
-      '">+32 496 80 79 76</a>' + (car.status !== "sold" ? '<a class="cc-small-link" href="' + routeToForm("question",car) + '">' + t("question") + '</a>' : "") + '</div>' +
+      '<span>' + t("appointment") + '</span></div><div class="cc-vehicle-contact">' + (car.status !== "sold" ? ' <a class="cc-small-link" href="' + routeToForm("question",car) + '">' + t("question") + '</a>' : "") + '</div>' +
       (jumps ? '<nav class="cc-dossier-links" aria-label="' + t("dossier") + '">' + jumps + '</nav>' : "") +
       '<div class="cc-share-link"><button type="button" data-copy-car>' + icon("copy") + t("copyLink") + '</button><span role="status"></span>' +
       '<button type="button" data-print-car>' + icon("print") + t("printDossier") + '</button></div>' +
-      '</div></div></section>' + dossier(car, carPassUrl) + '<footer class="cc-print-contact"><strong>Claude Cars · Claude C SRL</strong><br>Chaussée de Tirlemont 28/3 · 4520 Wanze · BE 0681.982.155<br>+32 496 80 79 76 · mcsportcars17@gmail.com<br>' + esc(shareUrl.href) + '</footer></div>';
+      '</div></div></section>' + dossier(car, carPassUrl) + '<footer class="cc-print-contact"><strong>Claude Cars</strong><br>' + esc(shareUrl.href) + '</footer></div>';
   }
   function bindGallery(car) {
     const items = pictures(car);
@@ -526,19 +525,11 @@
   if (page === "home") main.innerHTML = home();
   else if (page === "catalogue") main.innerHTML = catalogue();
   else if (page === "about") { main.innerHTML = about(); bindFeedback(); }
-  else if (page === "privacy") {
-    const section = (heading, body) => '<section><h2>' + t(heading) + '</h2><p>' + t(body) + '</p></section>';
-    main.innerHTML = '<article class="cc-privacy"><header class="cc-privacy-cover"><div class="cc-wrap cc-lead"><h1>' + t("privacy") +
-      '</h1></div></header><div class="cc-wrap cc-privacy-copy"><p>Claude C SRL · BE 0681.982.155<br>Chaussée de Tirlemont 28/3, 4520 ' + t("location") + '<br>' +
-      '<a href="mailto:mcsportcars17@gmail.com">mcsportcars17@gmail.com</a></p>' +
-      section("privacyEnquiries", "privacyEnquiriesText") + section("privacySecurity", "privacySecurityText") +
-      '<p>' + t("privacyDraft") + '</p><section><h2>' + t("privacyButtons") +
-      '</h2><label class="cc-choice"><input type="checkbox" id="cc-count-buttons">' + t("privacyCount") +
-      '</label><p>' + t("privacyChoiceText") + '</p></section>' + section("privacyRights", "privacyRightsText") +
-      '<section id="review-privacy"><h2>' + t("reviewTitle") + '</h2><p>' + t("feedbackPrivacy") + '</p></section><a href="https://www.autoriteprotectiondonnees.be/citoyen">' + t("privacyAuthority") + '</a></div></article>';
+  else if (page === "privacy" || page === "legal") {
+    main.innerHTML = window.CCLegal.render({state, path, esc});
     const choice = main.querySelector("#cc-count-buttons");
-    choice.checked = countButtonsAllowed();
-    choice.addEventListener("change", () => {
+    if (choice) choice.checked = countButtonsAllowed();
+    choice?.addEventListener("change", () => {
       try {
         if (choice.checked) sessionStorage.setItem(countButtonsKey, "yes");
         else sessionStorage.removeItem(countButtonsKey);

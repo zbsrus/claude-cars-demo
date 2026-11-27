@@ -295,11 +295,19 @@ body[data-page="home"] #mast { background: var(--studio-wall); border-bottom-col
 @media print { .cc-cover-next { display: none; } }
 .cc-privacy { background: var(--page-paper); }
 .cc-privacy-cover { background: var(--page-sage); color: var(--green-dark); }
-.cc-privacy-copy { padding-block: var(--page-band-space); }
+.cc-policy-title { padding-block: clamp(36px, 5vw, 76px); }
+.cc-policy-title h1 { margin: 0; font: 400 clamp(38px, 5vw, 72px)/1.04 var(--display); }
+.cc-privacy-copy { padding-block: clamp(32px, 5vw, 72px); }
 .cc-privacy-copy > p, .cc-privacy section { max-width: 70ch; }
-.cc-privacy section { margin-block: clamp(32px, 4vw, 60px) 18px; }
+.cc-privacy section + section, .cc-privacy-copy > p + section { margin-top: clamp(28px, 4vw, 46px); }
 .cc-privacy h2 { font: 400 clamp(26px, 2.4vw, 39px)/1.2 var(--display); margin-bottom: .35em; }
+.cc-privacy p { margin-block: .55em 0; }
 .cc-privacy a { text-underline-offset: 3px; color: var(--green); overflow-wrap: anywhere; }
+.cc-legal-facts { margin-block: 18px; }
+.cc-legal-facts > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); gap: 6px 20px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.cc-legal-facts dt { font-weight: 600; }
+.cc-legal-facts dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 520px) { .cc-legal-facts > div { grid-template-columns: 1fr; } }
 @media (min-width: 940px) {
   .cc-brand-cover {
     --scene-photo: min(61vw, max(590px, (100svh - 145px) * 1.54), 1130px);

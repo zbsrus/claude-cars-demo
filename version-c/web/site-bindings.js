@@ -23,7 +23,7 @@
     if (!image) return;
     if (url) {
       image.removeAttribute("srcset");
-      image.src = window.CCDemo.asset(url);
+      image.src = window.CCDemo?.asset(url) || url;
     }
     if (description) image.alt = description;
   }
@@ -34,7 +34,10 @@
     imageAt(".cc-z3 img", site.home.images?.hero, words("home").z3Alt);
     const stock = document.getElementById("stock-items");
     if (stock && site.home.featured?.length) {
-      const cards = new Map([...stock.querySelectorAll(".cc-car-card")].map(card => [(new URL(card.href).searchParams.get("id") || new URL(card.href).pathname.split("/").filter(Boolean).pop()), card]));
+      const cards = new Map([...stock.querySelectorAll(".cc-car-card")].map(card => {
+        const url = new URL(card.href);
+        return [url.searchParams.get("id") || url.pathname.split("/").filter(Boolean).pop(), card];
+      }));
       stock.prepend(...site.home.featured.map(id => cards.get(id)).filter(Boolean));
       // The editorial note always belongs to the car named in its dossier link.
       const link = document.querySelector(".cc-perspective .cc-doc-link");
@@ -52,74 +55,20 @@
   bindLabels("services", {services:'#cc-services-title, .cc-cover-links [href="#services"], .cc-empty + [href="#services"]',
     servicesIntro:".cc-services-inner h2 + p", search:'#services [href*="type=sourcing"], .cc-cover-links [href*="type=sourcing"]',
     import:'#services [href*="type=import"], .cc-cover-links [href*="type=import"]'});
-  if (page === "privacy") {
-    const copy = words("privacy");
-    label(document.querySelector(".cc-privacy h1"), copy.privacy);
-    const sections = all(".cc-privacy-copy > section");
-    for (const [i, [heading, body]] of [["privacyEnquiries","privacyEnquiriesText"], ["privacySecurity","privacySecurityText"],
-      ["privacyButtons","privacyChoiceText"], ["privacyRights","privacyRightsText"]].entries()) {
-      label(sections[i]?.querySelector("h2"), copy[heading]);
-      label(sections[i]?.querySelector("p"), copy[body]);
-    }
-    label(document.querySelector(".cc-privacy-copy > section + p"), copy.privacyDraft);
-  }
-
   const contacts = site.contact?.contacts || {};
-  const {phone, email, address, company, vat, facebook, whatsapp} = contacts;
-  function lines(element, parts) {
-    if (!element) return;
-    const nodes = [];
-    for (const part of parts) {
-      if (nodes.length) nodes.push(document.createElement("br"));
-      nodes.push(part);
-    }
-    element.replaceChildren(...nodes);
-  }
-  const originalCompany = "Claude C SRL", originalVAT = "BE 0681.982.155";
-  const legal = (company || originalCompany) + " · " + (vat || originalVAT);
-  const addressLines = address?.split(/\r?\n/).filter(Boolean);
-  const originalAddress = document.querySelector("#foot address")?.innerText.split("\n").filter(Boolean) || [];
-  if (address) {
-    lines(document.querySelector("#foot address"), addressLines);
-    for (const map of all('a[href^="https://www.google.com/maps/dir/"]')) {
-      const url = new URL(map.href);
-      url.searchParams.set("destination", addressLines.join(", "));
-      map.href = url.href;
-    }
-  }
-  if (company || vat) label(document.querySelector(".cc-foot-legal"), legal);
-  if (company || address) lines(document.querySelector(".ins-address address"), [company || originalCompany, ...(addressLines || originalAddress)]);
-  if (vat) {
-    const el = document.querySelector(".ins-address small");
-    if (el) el.textContent = window.CCInsightsCopy[lang].vat + " " + vat;
-  }
-  if (page === "privacy" && (company || vat || address)) {
-    const container = document.querySelector(".cc-privacy-copy > p");
-    const mail = container?.querySelector("a");
-    if (mail) lines(container, [legal, ...(addressLines || originalAddress), mail]);
-  }
-  if (phone) for (const link of all('a[href^="tel:"]')) {
+  const {phone, email, facebook, whatsapp} = contacts;
+  const demo = Boolean(window.CCDemo);
+  if (phone && !demo) for (const link of all('a[href^="tel:"]')) {
     link.href = "tel:" + phone.replace(/[^+\d]/g, "");
     label(link, phone);
   }
-  if (email) for (const link of all('a[href^="mailto:"]')) {
+  if (email && !demo) for (const link of all('a[href^="mailto:"]')) {
     link.href = "mailto:" + email;
     label(link, email);
   }
   if (facebook) for (const link of all('.cc-about-band a[href^="https://www.facebook.com/"]')) link.href = facebook;
-  if (page === "car" && Object.keys(contacts).length) {
-    const footer = document.querySelector(".cc-print-contact");
-    if (footer) {
-      const source = [...footer.childNodes].at(-1).textContent;
-      const brand = document.createElement("strong");
-      brand.textContent = "Claude Cars · " + (company || originalCompany);
-      lines(footer, [brand, [...(addressLines || originalAddress), vat || originalVAT].join(" · "),
-        (phone || document.querySelector("#foot [href^='tel:']").textContent) + " · " +
-        (email || document.querySelector("#foot [href^='mailto:']").textContent), source]);
-    }
-  }
   function bindWhatsApp() {
-    if (!whatsapp) return;
+    if (!whatsapp || demo) return;
     for (const link of all('a[href^="https://wa.me/"]')) {
       const url = new URL(link.href);
       const path = "/" + whatsapp.replace(/\D/g, "");
