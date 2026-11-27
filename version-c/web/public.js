@@ -9,8 +9,11 @@
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[c]);
-  const path = (suffix = "") => "/claude-cars-demo/version-c/" + lang + "/" + suffix + (suffix && !suffix.startsWith("#") ? "/" : "");
-  const carPath = (car) => window.CCDemo.carPath(car.id,lang);
+  const path = (suffix = "") => {
+    const [route, tail = ""] = suffix.split(/(?=[?#])/, 2);
+    return "/claude-cars-demo/version-c/" + lang + "/" + route + (route ? "/" : "") + tail;
+  };
+  const carPath = (car) => path("cars/" + encodeURIComponent(car.id));
   const carName = (car) => [car.make, car.model].filter(Boolean).join(" ");
   const firstPhoto = (car) => car.cover || car.photos?.find(Boolean) || "";
   const active = ["available", "soon", "reserved"].flatMap(status => cars.filter(car => car.status === status));
@@ -135,10 +138,9 @@
       '<p>' + t("location") + '</p></div><div class="cc-foot-links">' +
       navLinks([["cars","cars"],serviceRoute,["about","about"],["contact","contact"]]) + '</div><div class="cc-foot-links"><p>' + t("appointment") + '</p>' +
       navLinks([["privacy","privacy"],["legal","legal"]]) + '</div></div>' +
-      '<div class="cc-wrap cc-foot-legal">' + (window.CCDemo ? t("demoTitle") : esc(company + " · " + vat)) + '</div>';
+      '<div class="cc-wrap cc-foot-legal">' + esc(company + " · " + vat) + '</div>';
   }
   function photo(src, alt, className = "", highPriority = false, sizes = "100vw") {
-    if(src?.startsWith("/media/demo-")) return '<img class="' + esc(className) + '" src="' + esc(window.CCDemo.asset(src)) + '" alt="' + esc(alt) + '" decoding="async">';
     let url;
     try { url = new URL(src, location.origin); } catch { return ""; }
     if (!src || url.origin !== location.origin || !["http:", "https:"].includes(url.protocol)) return "";
@@ -265,7 +267,7 @@
     const settings = state.siteContent?.services;
     const uploaded = settings?.images?.sourcing;
     const figure = uploaded
-      ? '<figure class="cc-service-photo cc-service-photo-uploaded"><img loading="lazy" decoding="async" src="' + esc(window.CCDemo.asset(uploaded)) + '" alt="' + esc(settings.texts?.[lang]?.servicesPhotoAlt) + '"></figure>'
+      ? '<figure class="cc-service-photo cc-service-photo-uploaded"><img loading="lazy" decoding="async" src="' + esc(uploaded) + '" alt="' + esc(settings.texts?.[lang]?.servicesPhotoAlt) + '"></figure>'
       : '<figure class="cc-service-photo"><img loading="lazy" decoding="async" src="/claude-cars-demo/version-c/assets/identity/claude-sourcing-desk.webp" srcset="/claude-cars-demo/version-c/assets/identity/claude-sourcing-desk-720.webp 720w, /claude-cars-demo/version-c/assets/identity/claude-sourcing-desk.webp 1440w" sizes="(min-width: 1600px) 755px, (min-width: 850px) 47vw, 92vw" width="1440" height="960" alt="' + esc(t("servicesPhotoDefaultAlt")) + '"></figure>';
     return start + ' cc-services-feature"><div class="cc-service-copy">' + intro + links + '</div>' + figure + '</div></section>';
   }
@@ -308,11 +310,11 @@
     const ratings = [1, 2, 3, 4, 5].map(score =>
       '<label><input type="radio" name="rating" value="' + score + '" required aria-label="' + score + '/5">' + star + '</label>').join("");
     return '<section id="feedback" class="cc-feedback" tabindex="-1" aria-labelledby="cc-feedback-title"><div class="cc-wrap cc-feedback-inner">' +
-      '<div><h2 id="cc-feedback-title" class="cc-section-title">' + t("feedbackTitle") + '</h2><p class="cc-prose">' + t("demoForms") + '</p></div>' +
+      '<div><h2 id="cc-feedback-title" class="cc-section-title">' + t("feedbackTitle") + '</h2><p class="cc-prose">' + esc(window.CCPages.review) + '</p></div>' +
       '<div><form class="cc-feedback-form"><fieldset><legend>' + t("feedbackRating") + '</legend><div class="cc-feedback-stars">' + ratings + '</div></fieldset>' +
       '<label for="cc-feedback-comment">' + t("feedbackComment") + '</label><textarea id="cc-feedback-comment" name="comment" rows="3" maxlength="500" aria-describedby="cc-feedback-hint" placeholder="' + esc(t("feedbackPrompt")) + '"></textarea>' +
       '<p id="cc-feedback-hint" class="cc-feedback-hint">' + t("feedbackNoDetails") + '</p><label class="cc-feedback-permission" hidden><input type="checkbox" name="permission"> <span>' + t("feedbackPermission") + '</span></label>' +
-      '<button type="submit" class="cc-button">' + t("feedbackSend") + '</button><a class="cc-text-link cc-feedback-privacy" href="' + path("privacy") + '#review-privacy">' + t("privacy") + '</a></form>' +
+      '<button type="submit" class="cc-button">' + esc(window.CCPages.email) + '</button><a class="cc-text-link cc-feedback-privacy" href="' + path("privacy") + '#review-privacy">' + t("privacy") + '</a></form>' +
       '<p class="cc-feedback-message" role="status" tabindex="-1"></p></div></div></section>';
   }
   function bindFeedback() {
@@ -320,19 +322,18 @@
     if (!form) return;
     const {comment, permission} = form.elements;
     const consent = permission.closest("label");
-    const button = form.querySelector("button[type=submit]");
-    const message = form.parentElement.querySelector(".cc-feedback-message");
     const sync = () => {
-      consent.hidden = true;
+      consent.hidden = !comment.value.trim();
       if (consent.hidden) permission.checked = false;
     };
     comment.addEventListener("input", sync);
     sync();
-    let id, busy = false;
-    form.addEventListener("submit", async event => {
+    form.addEventListener("submit", event => {
       event.preventDefault();
-      message.textContent = window.CC.demoNotice; message.focus(); return;
-
+      const review = [form.elements.rating.value + "/5", comment.value.trim(),
+        window.CCPages.permission + " — " + (permission.checked ? window.CCPages.yes : window.CCPages.no)].filter(Boolean).join("\n");
+      const {email} = window.CCLegal.business(window.CC);
+      location.href = "mailto:" + email + "?subject=" + encodeURIComponent(t("feedbackTitle")) + "&body=" + encodeURIComponent(review);
     });
   }
   function home() {
@@ -396,7 +397,7 @@
       '<button type="button" data-cc-thumb="' + i + '" aria-label="' + esc(t("photo") + " " + (i+1) + " · " + caption(car,src,i)) +
       '" aria-pressed="' + (i === 0) + '">' + photo(src, "", "", false, "90px") + '</button>').join("") + '</div>' : "";
     const video = car.video && /^\/(?!\/)/.test(car.video) ? '<video class="cc-film" controls playsinline preload="none" aria-label="' + esc(t("video") + " · " + carName(car)) +
-      '" src="' + esc(window.CCDemo.asset(car.video)) + '"></video>' : "";
+      '" src="' + esc(car.video) + '"></video>' : "";
     if (!main) return video || '<div class="cc-gallery-image cc-photo-stage"><span>' + t("photosPending") + '</span></div>';
     return '<div class="cc-gallery"><div class="cc-gallery-frame"><button type="button" class="cc-gallery-photo" data-cc-enlarge aria-label="' + t("full") + '"><span class="cc-gallery-image cc-photo-stage">' +
       photo(main,carName(car) + " · " + caption(car,main),"",true, "(max-width: 849px) 100vw, 58vw") + '</span><span class="cc-zoom">' + icon("zoom") + t("full") + '</span></button>' + controls + '</div>' +
@@ -410,8 +411,9 @@
   }
   function vehicle(car) {
     const shareUrl = new URL(carPath(car),location.origin);
+    const wa = "https://wa.me/32496807976?text=" + encodeURIComponent(t("greeting") + " " + carName(car) + ".\n" + shareUrl.href);
     const [nextUrl, nextLabel] = nextCarAction(car);
-    const actions = button(nextUrl, nextLabel);
+    const actions = button(nextUrl, nextLabel) + (car.status !== "sold" ? '<a class="cc-button cc-button-outline" aria-label="' + t("ask") + '" data-cc-event="whatsapp" data-cc-car="' + esc(car.id) + '" href="' + esc(wa) + '">' + icon("message") + 'WhatsApp</a>' : '');
     const carPassUrl = documentUrl(car.carpass);
     const jumps = ["history","condition","documents"].filter(key => details(car,key).text || (key === "documents" && carPassUrl))
       .map(key => '<a href="#cc-' + key + '">' + t(key) + '</a>').join("");
@@ -421,11 +423,17 @@
       '<h1 id="cc-vehicle-title">' + splitName(car) + '</h1>' + (price(car) ? '<p class="cc-summary-price">' + esc(price(car)) + '</p>' : "") +
       '<dl class="cc-specs"><div><dt>' + t("year") + '</dt><dd>' + esc(car.year) + '</dd></div><div><dt>' + t("km") + '</dt><dd>' + esc(km(car.km)) +
       '</dd></div></dl><div class="cc-buy-actions">' + actions + '</div></div><div class="cc-vehicle-media">' + gallery(car) + '</div><div class="cc-vehicle-tools"><div class="cc-seller-inline"><span>' + icon("location") + t("location") + '</span>' +
-      '<span>' + t("appointment") + '</span></div><div class="cc-vehicle-contact">' + (car.status !== "sold" ? ' <a class="cc-small-link" href="' + routeToForm("question",car) + '">' + t("question") + '</a>' : "") + '</div>' +
+      '<span>' + t("appointment") + '</span></div><div class="cc-vehicle-contact"><a class="cc-number" href="tel:+32496807976" data-cc-event="phone" data-cc-car="' + esc(car.id) +
+      '">+32 496 80 79 76</a>' + (car.status !== "sold" ? '<a class="cc-small-link" href="' + routeToForm("question",car) + '">' + t("question") + '</a>' : "") + '</div>' +
       (jumps ? '<nav class="cc-dossier-links" aria-label="' + t("dossier") + '">' + jumps + '</nav>' : "") +
       '<div class="cc-share-link"><button type="button" data-copy-car>' + icon("copy") + t("copyLink") + '</button><span role="status"></span>' +
       '<button type="button" data-print-car>' + icon("print") + t("printDossier") + '</button></div>' +
-      '</div></div></section>' + dossier(car, carPassUrl) + '<footer class="cc-print-contact"><strong>Claude Cars</strong><br>' + esc(shareUrl.href) + '</footer></div>';
+      '</div></div></section>' + dossier(car, carPassUrl) + printContact(shareUrl) + '</div>';
+  }
+  function printContact(shareUrl) {
+    const {company, vat, phone, email} = window.CCLegal.business(state);
+    return '<footer class="cc-print-contact"><strong>' + esc("Claude Cars · " + company) + '</strong><br>' +
+      esc([t("location"), vat, phone, email].join(" · ")) + '<br>' + esc(shareUrl.href) + '</footer>';
   }
   function bindGallery(car) {
     const items = pictures(car);

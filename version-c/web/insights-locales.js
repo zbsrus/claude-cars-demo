@@ -1,18 +1,6 @@
 (() => {
   'use strict';
   const rows = {
-    crmTitle: ["Suivi des clients", "Klantopvolging", "Kundenkontakte", "Customer follow-up", "Seguimiento de clientes"],
-    crmIntro: ["Retrouvez les coordonnées de chaque client et indiquez où en est votre échange.", "Bekijk de contactgegevens en houd bij wie u hebt beantwoord.", "Hier finden Sie die Kontaktdaten und den Stand jedes Gesprächs.", "Keep contact details and track what happens after each enquiry.", "Consulta los datos de cada cliente y registra cómo avanza la conversación."],
-    crmNext: ["Contactez le client, puis marquez votre réponse ici.", "Neem contact op en markeer het contact daarna als beantwoord.", "Kontaktieren Sie den Kunden und markieren Sie die Anfrage anschließend als beantwortet.", "Contact the customer, then mark this enquiry as replied.", "Contacta con el cliente y marca la consulta como respondida."],
-    crmReplied: ["Une fois le rendez-vous convenu avec le client, confirmez la visite ici.", "Bevestig het bezoek hier zodra de afspraak vaststaat.", "Bestätigen Sie hier die Besichtigung, sobald der Termin vereinbart ist.", "Once you agree a time with the customer, confirm the viewing here.", "Cuando acordéis una cita, confirma aquí la visita."],
-    crmBooked: ["Visite convenue. Si les plans changent, modifiez le statut.", "Bezoek afgesproken. Wijzig de status als de plannen veranderen.", "Besichtigung vereinbart. Bei Änderungen können Sie den Status anpassen.", "Viewing agreed. You can change the status if plans change.", "Visita acordada. Puedes cambiar el estado si cambian los planes."],
-    crmEdit: ["Modifier le contact", "Contact bewerken", "Kontakt bearbeiten", "Edit contact", "Editar contacto"],
-    crmDelete: ["Supprimer le contact", "Contact verwijderen", "Kontakt löschen", "Delete contact", "Eliminar contacto"],
-    crmConfirm: ["Supprimer définitivement cette fiche ?", "Dit contact definitief verwijderen?", "Diesen Kontakt endgültig löschen?", "Permanently delete this contact?", "¿Eliminar este contacto definitivamente?"],
-    crmNextStep: ["Prochaine étape", "Volgende stap", "Nächster Schritt", "Next step", "Siguiente paso"],
-    crmStatus: ["Statut", "Status", "Status", "Status", "Estado"],
-    crmOpen: ["Ouvrir la fiche", "Contact openen", "Kontakt öffnen", "Open contact", "Abrir ficha"],
-
     stockChanged: ['La disponibilité de cette voiture a changé. Actualisez-la pour reprendre votre demande.', 'De beschikbaarheid van deze auto is gewijzigd. Vernieuw de gegevens om verder te gaan.', 'Die Verfügbarkeit dieses Fahrzeugs hat sich geändert. Rufen Sie den aktuellen Stand ab, um fortzufahren.', 'This car’s availability has changed. Check its current status to continue your enquiry.', 'La disponibilidad de este coche ha cambiado. Comprueba su estado para continuar la consulta.'],
     refreshStock: ['Vérifier la disponibilité', 'Beschikbaarheid bekijken', 'Verfügbarkeit prüfen', 'Check availability', 'Comprobar disponibilidad'],
     filterStatus: ['Filtrer les demandes par statut', 'Aanvragen filteren op status', 'Anfragen nach Status filtern', 'Filter enquiries by status', 'Filtrar consultas por estado'],
@@ -366,7 +354,7 @@
       'Preparar mi mensaje',
     ],
     formHandoff: ["Préparez votre demande et relisez-la avant de choisir comment l’envoyer.", "Stel uw aanvraag op en lees deze na voordat u kiest hoe u ze verstuurt.", "Bereiten Sie Ihre Anfrage vor und prüfen Sie sie vor dem Versand.", "Prepare and review your enquiry before choosing how to send it.", "Prepara y revisa tu consulta antes de elegir cómo enviarla."],
-    handoff: ["En envoyant via le site, vous transmettez vos coordonnées et votre demande à Claude. Elles restent dans sa boîte de réception pendant 90 jours. Vous pouvez aussi envoyer le message dans WhatsApp.", "Via de site stuurt u uw contactgegevens en aanvraag naar Claude. Ze blijven 90 dagen in zijn inbox. U kunt het bericht ook via WhatsApp sturen.", "Beim Versand über die Website gelangen Ihre Kontaktdaten und Ihre Anfrage für 90 Tage in Claudes Posteingang. Sie können die Nachricht auch über WhatsApp senden.", "Sending through the site puts your contact details and enquiry in Claude’s inbox for 90 days. You can also send the message through WhatsApp.", "Al enviar desde la web, tus datos de contacto y tu consulta permanecen 90 días en la bandeja de Claude. También puedes enviar el mensaje por WhatsApp."],
+    handoff: ["En envoyant via le site, vous transmettez votre demande à Claude (90 jours dans sa boîte de réception). Si vous ouvrez WhatsApp, le brouillon est transmis à ce service. Vous décidez ensuite de l’envoyer ou non.", "Via de site gaat uw aanvraag naar Claude (90 dagen in zijn inbox). Als u WhatsApp opent, wordt het concept aan die dienst doorgegeven. Daarna beslist u of u het verstuurt.", "Über die Website geht Ihre Anfrage an Claude (90 Tage im Posteingang). Wenn Sie WhatsApp öffnen, erhält der Dienst Ihren Entwurf. Erst danach entscheiden Sie, ob Sie ihn absenden.", "Sending through the site puts your enquiry in Claude’s inbox for 90 days. Opening WhatsApp passes the draft to WhatsApp. You then decide whether to send it.", "Al enviar desde el sitio, tu consulta queda 90 días en la bandeja de Claude. Al abrir WhatsApp, el borrador se transmite a ese servicio. Después decides si lo envías."],
     prepared: [
       'Votre message est prêt',
       'Uw bericht staat klaar',

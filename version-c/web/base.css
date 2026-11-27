@@ -132,5 +132,3 @@ img, video { max-width: 100%; }
 .cc-fallback { padding-block: clamp(36px, 7vw, 96px); }
 .cc-fallback h1 { font: 400 clamp(36px, 6vw, 76px)/1.05 var(--display); }
 .cc-fallback p, .cc-fallback nav { max-width: 68ch; margin-block: 1rem; }
-
-.demo-bar{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:6px 4vw;background:#e7ede7;color:#17473f;font:13px/1.5 system-ui,sans-serif}.demo-bar a{color:inherit}@media print{.demo-bar{display:none}}

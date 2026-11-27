@@ -31,7 +31,8 @@
   const title = (car) => [car?.make, car?.model].filter(Boolean).join(' ');
   const findCar = (carId) => cars().find((c) => c.id === carId);
   const canViewCar = (car) => car?.status === 'available';
-  const carURL = (car) => location.origin + window.CCDemo.carPath(car,lang);
+  const carURL = (car) => `${location.origin}/claude-cars-demo/version-c/${lang}/cars/${encodeURIComponent(car)}/`;
+  const waURL = (message) => `https://wa.me/32496807976?text=${encodeURIComponent(message)}`;
   const dateKey = (time) => dayFormat.format(time);
   const dayNumber = (key) => Math.floor(Date.parse(key + 'T00:00:00Z') / 86400000);
   const asDay = (num) => num * 86400000;
@@ -235,14 +236,28 @@
     const contextual = !!originCar || types.includes(query.get('type'));
     const titleKey = () => contextual ? draft.type : 'contactPage';
     const introKey = () => contextual ? ({ question: 'questionIntro', viewing: 'viewingIntro', sourcing: 'sourcingIntro', import: 'importIntro' })[draft.type] : 'contactIntro';
-    root.innerHTML = `<div class="ins-contact"><header class="ins-contact-cover"><div class="cc-wrap ins-contact-intro">${back}<div class="ins-contact-lead"><h1>${t[titleKey()]}</h1><p>${t[introKey()]}</p></div></div></header><div class="cc-wrap ins-contact-grid"><section id="ins-formbox" class="ins-formbox"></section><aside class="ins-address"><h2>${t.contactDetails}</h2>
-      <address>Wanze · ${t.belgium}</address><p>${t.byAppointment}</p>
-      <a href="/claude-cars-demo/version-c/${lang}/privacy/">${t.privacy}</a></aside></div></div>`;
-
+    const {email} = window.CCLegal.business(window.CC);
+    root.innerHTML = `<div class="ins-contact"><header class="ins-contact-cover"><div class="cc-wrap ins-contact-intro">${back}<div class="ins-contact-lead"><h1>${t[titleKey()]}</h1><p>${t[introKey()]}</p></div></div></header><div class="cc-wrap ins-contact-grid"><section id="ins-formbox" class="ins-formbox"></section><aside class="ins-address"><h2>${t.contactDetails}</h2><address>Wanze · ${t.belgium}</address><p>${t.byAppointment}</p><div class="ins-actions ins-direct"><a class="ins-primary" data-ins-whats data-cc-event="whatsapp" target="_blank" rel="noopener noreferrer" href="${esc(waURL(t.hello))}">WhatsApp ↗</a><a class="ins-secondary" data-ins-phone data-cc-event="phone" href="tel:+32496807976">+32 496 80 79 76</a></div><a href="mailto:${esc(email)}">${esc(email)}</a><a href="/claude-cars-demo/version-c/${lang}/legal/">${window.CCLegal.get("legal", lang)}</a></aside></div></div>`;
+    if (!contextual) root.querySelector('.ins-contact-intro').append(root.querySelector('.ins-direct'));
     const box = document.getElementById('ins-formbox');
+    const directWhats = root.querySelector('[data-ins-whats]');
     function associatedCar() {
       return draft.type === 'import' ? null : findCar(draft.car);
     }
+    function updateDirectLink() {
+      const car = associatedCar();
+      const message = [
+        t.hello,
+        car ? t[draft.type] + ' · ' + title(car) : t[requestPhrases[draft.type]],
+        draft.type === 'question' && car === originCar ? presetQuestion : '',
+        car ? carURL(car.id) : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+      directWhats.href = waURL(message);
+      for (const link of root.querySelectorAll('.ins-direct [data-cc-event]')) link.dataset.ccCar = car?.id || '';
+    }
+    updateDirectLink();
     function capture() {
       const form = box.querySelector('form');
       if (form) draft = { ...draft, ...values(form) };
@@ -297,6 +312,7 @@
       focusField(box.querySelector('select'));
     }
     function showReceipt(request) {
+      directWhats.hidden = true;
       receipt = request;
       prepared = hasInput = false;
       box.innerHTML = `<h2 tabindex="-1">${t.received}</h2><p>${t.receivedNote}</p>
@@ -307,20 +323,17 @@
     }
     function showPrepared() {
       prepared = true;
+      directWhats.hidden = true;
       const request = lead();
       const msg = buildMessage(request);
-      const buttonLabel = () => attemptedVersion === submission.version ? t.retrySend :
-        uncertain ? t.sendCorrection : t.siteSend;
-      const recoveryNote = attemptedVersion === submission.version ? t.deliveryUncertain : t.correctionNote;
       box.innerHTML = `<h2 tabindex="-1">${t.prepared}</h2><div class="ins-message">${esc(msg)}</div>
-        <p class="ins-note">${window.CCLegal.get("demoForms", lang)} <a href="/claude-cars-demo/version-c/${lang}/privacy" target="_blank" rel="noopener">${t.privacy}</a></p>
-        <p class="ins-error" role="alert">${uncertain ? recoveryNote : ''}</p>
-        <div class="ins-actions"><button type="button" class="ins-primary" data-send>${buttonLabel()}</button>
+        <p class="ins-note">${esc(window.CCPages.prepare)} ${esc(window.CCLegal.get("whatsapp", lang))} <a href="/claude-cars-demo/version-c/${lang}/privacy/" target="_blank" rel="noopener">${t.privacy}</a></p>
+        <p class="ins-error" role="alert"></p>
+        <div class="ins-actions"><a class="ins-primary" href="mailto:${esc(email)}?subject=${encodeURIComponent(t[request.type])}&amp;body=${encodeURIComponent(msg)}">${esc(window.CCPages.email)}</a>
+        <a class="ins-secondary" data-cc-event="whatsapp" data-cc-car="${esc(request.car)}" target="_blank" rel="noopener noreferrer" href="${esc(waURL(msg))}">${t.openWhats} ↗</a>
         <button type="button" data-edit class="ins-text-btn">${t.edit}</button>
         <button type="button" data-refresh-stock class="ins-secondary" hidden>${t.refreshStock}</button></div>`;
-      const send = box.querySelector('[data-send]');
       const edit = box.querySelector('[data-edit]');
-      const alert = box.querySelector('[role="alert"]');
       const refreshStock = box.querySelector('[data-refresh-stock]');
       refreshStock.onclick = () => {
         prepared = false;
@@ -336,11 +349,10 @@
         draw();
         focusField(box.querySelector('#ins-date') || box.querySelector('select'));
       };
-      send.onclick = () => { alert.textContent = window.CC.demoNotice; };
-
       box.querySelector('h2').focus();
     }
     function draw() {
+      directWhats.hidden = hasInput || uncertain;
       const kind = draft.type;
       root.querySelector('.ins-contact-lead h1').textContent = t[titleKey()];
       root.querySelector('.ins-contact-lead p').textContent = t[introKey()];
@@ -348,7 +360,7 @@
         draft.model = title(findCar(draft.car));
       const showCar = kind !== 'import' && (kind !== 'sourcing' || !!draft.car || !!originCar);
       const viewingNote = kind === viewingFallback ? (kind === 'question' ? t.availabilityNote : t.stockUnavailable) : '';
-      box.innerHTML = `<form novalidate>${returning ? `<p class="ins-draft-note" role="status">${t.resumed}</p>` : ''}${uncertain ? `<p class="ins-note">${t.correctionNote}</p>` : ''}<p class="ins-note">${window.CCLegal.get("demoForms", lang)}</p><p class="ins-instruction">${t.requiredFields}</p>${viewingNote ? `<p class="ins-note">${viewingNote}</p>` : ''}<div class="ins-field"><label for="ins-type">${t.type}</label><select id="ins-type" name="type">${availableTypes.map((k) => option(k, t[k], kind)).join('')}</select></div>
+      box.innerHTML = `<form novalidate>${returning ? `<p class="ins-draft-note" role="status">${t.resumed}</p>` : ''}${uncertain ? `<p class="ins-note">${t.correctionNote}</p>` : ''}<p class="ins-instruction">${t.requiredFields}</p>${viewingNote ? `<p class="ins-note">${viewingNote}</p>` : ''}<div class="ins-field"><label for="ins-type">${t.type}</label><select id="ins-type" name="type">${availableTypes.map((k) => option(k, t[k], kind)).join('')}</select></div>
       ${showCar ? carSelect(draft.car, kind) : ''}
       ${kind === 'viewing' ? `<p class="ins-note">${t.appointmentNote} ${t.dateLocal}.</p>${field('date', t.date, draft.date, `type="datetime-local" min="${wallTime()}"`)}` : ''}
       ${
@@ -360,17 +372,19 @@
       ${kind === 'import' ? field('listingUrl', t.listingUrl, draft.listingUrl, 'type="url" inputmode="url" spellcheck="false" required') : ''}
       ${field('message', kind === 'question' ? t.message : t.messageOpt, draft.message, kind === 'question' ? 'required' : '', true)}
       <div class="ins-pair">${field('name', t.name, draft.name, 'autocomplete="name" required')}${field('reach', t.reach, draft.reach, 'autocomplete="on" spellcheck="false" required')}</div>
-      <p class="ins-note ins-before-review">${t.formHandoff} <a href="/claude-cars-demo/version-c/${lang}/privacy" target="_blank" rel="noopener">${t.privacy}</a></p>
+      <p class="ins-note ins-before-review">${esc(window.CCPages.prepare)} <a href="/claude-cars-demo/version-c/${lang}/privacy/" target="_blank" rel="noopener">${t.privacy}</a></p>
       <div class="ins-actions"><button class="ins-primary" type="submit">${t.prepare} <span aria-hidden="true">→</span></button><button type="button" class="ins-text-btn" data-clear ${hasInput && !uncertain ? '' : 'hidden'}>${t.clearDraft}</button></div></form>`;
       const form = box.querySelector('form');
       const clear = form.querySelector('[data-clear]');
       form.addEventListener('input', () => {
         lastEdited = Date.now();
         hasInput = true;
+        directWhats.hidden = true;
         clear.hidden = uncertain;
       });
       clear.onclick = () => { if (window.confirm(t.clearPrompt)) startAgain(); };
       if (form.elements.car) draft.car = form.elements.car.value;
+      updateDirectLink();
       if (form.elements.car)
         form.elements.car.onchange = () => {
           const previous = title(findCar(draft.car));
@@ -378,6 +392,7 @@
           if (kind === 'sourcing' && (!form.elements.model.value || form.elements.model.value === previous)) {
             form.elements.model.value = title(findCar(draft.car));
           }
+          updateDirectLink();
         };
       form.elements.type.onchange = () => {
         capture();
@@ -421,7 +436,7 @@
   const metricKeys = ['visits', 'views', 'whatsapp', 'phone', 'saved', 'bookings'];
   const metricNotes = ['visitsTip', 'viewsTip', 'clicksTip', 'clicksTip', 'savedTip', 'bookedTip'];
   const makeOwnerURL = (tab, params = {}) => {
-    const u = new URL(`/claude-cars-demo/version-c/${lang}/owner/`, location.origin);
+    const u = new URL(`/${lang}/owner`, location.origin);
     u.searchParams.set('tab', tab);
     for (const [key, value] of Object.entries(params)) if (value) u.searchParams.set(key, value);
     return u.pathname + u.search;
@@ -605,7 +620,7 @@
       stats(panel, data);
       focusField(panel.querySelector('[data-chart-metric]'));
       for (const link of document.querySelectorAll('#mast [data-cc-language]'))
-        link.href = '/claude-cars-demo/version-c/' + link.dataset.ccLanguage + '/owner/' + location.search;
+        link.href = '/' + link.dataset.ccLanguage + '/owner' + location.search;
     });
   }
   let recentChange = null;
@@ -677,7 +692,7 @@
             key === 'listingUrl' && httpURL(value)
               ? `<a href="${esc(value)}" target="_blank" rel="noopener noreferrer">${esc(value)} ↗</a>`
               : esc(fieldValue(key, value));
-          return `<div class="crm-fact-text"><dt>${esc(t[detailLabels[key] || key])}</dt><dd>${display}</dd></div>`;
+          return `<div><dt>${esc(t[detailLabels[key] || key])}</dt><dd>${display}</dd></div>`;
         })
         .join('');
       const undo =
@@ -689,18 +704,7 @@
       const car = findCar(lead.car);
       const dossier = car?.status === 'draft' ? makeOwnerURL('edit',{car:lead.car}) : carURL(lead.car);
       const appointment = !selected && lead.fields.date ? `<p class="ins-appointment"><strong>${t.requestedTime}</strong> · ${esc(fieldValue('date',lead.fields.date))}</p>` : '';
-      if (selected) {
-        const meta = [t[lead.type === 'manual' ? 'ownWhats' : lead.type], lead.lang?.toUpperCase(), dateFormat.format(lead.time), lead.buyerUpdatedAt ? t.buyerUpdated : ''].filter(Boolean).join(' · ');
-        const carField = lead.title ? `<div><dt>${t.car}</dt><dd>${car ? `<a href="${esc(dossier)}">${esc(lead.title)}</a>` : esc(lead.title)}</dd></div>` : '';
-        const transition = (next,label,primary) => `<button type="button" class="${primary?'ins-primary':'ins-secondary'}" data-state="${next}" data-lead="${esc(lead.id)}">${label}</button>`;
-        return `<article class="ins-lead crm-record" id="ins-lead-${esc(lead.id)}" tabindex="-1">
-          <header class="crm-identity"><div class="crm-name"><div class="crm-title-row"><h1>${esc(leadName)}</h1><span class="crm-state crm-state-${status}" aria-live="polite">${t[status]}</span></div><p>${esc(meta)}</p></div><button type="button" class="ins-secondary" data-edit-contact>${t.crmEdit}</button></header>
-          <dl class="crm-facts">${reach}${carField}${details}</dl>
-          <section class="crm-follow"><h2>${t.crmNextStep}</h2><p>${status==='new'?t.crmNext:status==='replied'?t.crmReplied:t.crmBooked}</p><div class="ins-actions">${status==='new'?transition('replied',t.markReply,true):''}${status!=='booked'?transition('booked',t.markBooked,status==='replied'):''}${undo}${reopen}</div></section>
-          <footer class="crm-controls">${lead.car?`<a href="${esc(carStatsURL)}">${t.viewStats}</a>`:''}<button type="button" class="ins-text-btn" data-delete-contact>${t.crmDelete}</button></footer>
-        </article>`;
-      }
-      return `<article class="ins-lead${selected === lead.id ? ' is-selected' : ''}" id="ins-lead-${esc(lead.id)}" tabindex="-1"><div class="ins-lead-heading"><h2>${esc(leadName)}</h2><span aria-live="polite">${t.crmStatus} · ${t[status]}</span></div><p class="ins-lead-meta">${esc([t[lead.type === 'manual' ? 'ownWhats' : lead.type], lead.lang?.toUpperCase(), dateFormat.format(lead.time), lead.buyerUpdatedAt ? t.buyerUpdated : ''].filter(Boolean).join(' · '))}</p>${lead.title ? `<p class="ins-lead-car">${car ? `<a class="ins-back" href="${esc(dossier)}">${esc(lead.title)}</a>` : esc(lead.title)}</p>` : ''}${appointment}${selected ? `<dl class="ins-lead-data">${reach}${details}</dl>` : ''}<p class="ins-appointment">${status === "new" ? t.crmNext : status === "replied" ? t.crmReplied : t.crmBooked}</p><div class="ins-actions">${selected ? '' : `<a class="ins-text-btn" href="${esc(detailURL)}">${t.crmOpen}</a>`}${status === 'new' ? `<button type="button" class="ins-secondary" data-state="replied" data-lead="${esc(lead.id)}">${t.markReply}</button>` : ''}${status !== 'booked' ? `<button type="button" class="ins-secondary" data-state="booked" data-lead="${esc(lead.id)}">${t.markBooked}</button>` : ''}${undo}${reopen}</div>${selected && lead.car ? `<a class="ins-back" href="${esc(carStatsURL)}">${t.viewStats}</a>` : ''}</article>`;
+      return `<article class="ins-lead${selected === lead.id ? ' is-selected' : ''}" id="ins-lead-${esc(lead.id)}" tabindex="-1"><div class="ins-lead-heading"><h2>${esc(leadName)}</h2><span aria-live="polite">${t[status]}</span></div><p class="ins-lead-meta">${esc([t[lead.type === 'manual' ? 'ownWhats' : lead.type], lead.lang?.toUpperCase(), dateFormat.format(lead.time), lead.buyerUpdatedAt ? t.buyerUpdated : ''].filter(Boolean).join(' · '))}</p>${lead.title ? `<p class="ins-lead-car">${car ? `<a class="ins-back" href="${esc(dossier)}">${esc(lead.title)}</a>` : esc(lead.title)}</p>` : ''}${appointment}${selected ? `<dl class="ins-lead-data">${reach}${details}</dl>` : ''}<div class="ins-actions">${selected ? '' : `<a class="ins-text-btn" href="${esc(detailURL)}">${t.openRequest}</a>`}${status === 'new' ? `<button type="button" class="ins-secondary" data-state="replied" data-lead="${esc(lead.id)}">${t.markReply}</button>` : ''}${status !== 'booked' ? `<button type="button" class="ins-secondary" data-state="booked" data-lead="${esc(lead.id)}">${t.markBooked}</button>` : ''}${undo}${reopen}</div>${selected && lead.car ? `<a class="ins-back" href="${esc(carStatsURL)}">${t.viewStats}</a>` : ''}</article>`;
     }
     let stored = readManualDraft();
     const saved = stored && data.leads.find(lead => lead.id === stored.id);
@@ -709,7 +713,7 @@
     const manualForm = selected ? '' : `<details class="ins-manual" ${stored ? 'open' : ''}><summary>${t.manual}</summary><form data-manual novalidate><p class="ins-instruction">${stored ? t.manualResumed : t.requiredFields}</p><div class="ins-pair">${field('name', t.ownerName, valuesBefore.name || '', 'required')}${field('reach', t.reach, valuesBefore.reach || '', 'required')}</div>${carSelect(valuesBefore.car || '', 'question')}${field('note', t.note, valuesBefore.note || '', '', true)}<div class="ins-actions"><button class="ins-primary" type="submit">${t.add}</button><button class="ins-text-btn" type="button" data-forget-manual ${stored ? '' : 'hidden'}>${t.clearDraft}</button></div><p class="ins-error" data-manual-status role="status"></p></form></details>`;
     const group = [kind && t[kind === 'manual' ? 'ownWhats' : kind], fromStats && contextCar && title(findCar(contextCar)),
       fromStats && t[period === 'all' ? 'all' : period === '7' ? 'seven' : 'thirty']].filter(Boolean).join(' · ');
-    panel.innerHTML = `<div class="ins-dashboard">${contextLinks}${selected && rows.length ? '' : `<div class="ins-report-head"><div><h1>${selected ? t.enquiryDetail : t.crmTitle}</h1>${group ? `<p>${esc(group)}</p>` : ''}<p>${t.crmIntro}</p></div></div>`}${manualForm}${filters}<p class="ins-error" data-inbox-status role="status">${saved ? `<a href="${esc(makeOwnerURL('enquiries',{lead:saved.id}))}">${t.contactSaved} →</a>` : ''}</p><div class="ins-leads">${rows.length ? rows.map(row).join('') : `<p>${selected ? t.missingLead : filter || kind ? t.noMatching : t.noRequests}</p>`}</div></div>`;
+    panel.innerHTML = `<div class="ins-dashboard">${contextLinks}<div class="ins-report-head"><div><h1>${selected ? t.enquiryDetail : t.enquiries}</h1>${group ? `<p>${esc(group)}</p>` : ''}<p>${t.inboxNote}</p></div></div>${manualForm}${filters}<p class="ins-error" data-inbox-status role="status">${saved ? `<a href="${esc(makeOwnerURL('enquiries',{lead:saved.id}))}">${t.contactSaved} →</a>` : ''}</p><div class="ins-leads">${rows.length ? rows.map(row).join('') : `<p>${selected ? t.missingLead : filter || kind ? t.noMatching : t.noRequests}</p>`}</div></div>`;
     const output = panel.querySelector('[data-inbox-status]');
     const manual = panel.querySelector('[data-manual]');
     const manualErrors = () => {
@@ -755,7 +759,9 @@
           id: manualId, type: 'manual', lang, car, fields: {name, reach, note},
         });
         clearManualDraft();
-        location.assign(makeOwnerURL('enquiries', {lead:manualId}));
+        if (fromStats || kind || filter && filter !== 'new') {
+          location.assign(makeOwnerURL('enquiries', {lead:manualId}));
+        } else await refresh(manualId);
       } catch (error) {
         const status = manual.querySelector('[data-manual-status]');
         if (error.message === 'session') status.textContent = window.CCOwnerLocales.t('session',lang);
@@ -771,74 +777,6 @@
         button.disabled = false;
       }
     };
-    const contact = selected && rows[0];
-    if (contact) {
-      const card = panel.querySelector('.ins-lead');
-      const ownerText = key => window.CCOwnerLocales.t(key,lang);
-      const edit = card.querySelector('[data-edit-contact]');
-      const remove = card.querySelector('[data-delete-contact]');
-      const endpoint = '/api/owner/enquiries/' + encodeURIComponent(contact.id);
-      edit.onclick = () => {
-        if (card.querySelector('form')) return;
-        const currentState = states.includes(contact.status) ? contact.status : 'new';
-        const statusOptions = states.map(state => `
-          <label class="crm-choice crm-state-${state}">
-            <input type="radio" name="status" value="${state}" ${state === currentState ? 'checked' : ''}>
-            ${esc(t[state])}
-          </label>`).join('');
-        card.insertAdjacentHTML('beforeend', `
-          <form class="crm-editor" data-contact-editor aria-labelledby="crm-edit-title" novalidate>
-            <h2 id="crm-edit-title">${t.crmEdit}</h2>
-            <div class="crm-editor-fields">
-              ${field('name', t.ownerName, contact.fields.name, 'required')}
-              ${field('reach', t.reach, contact.fields.reach, 'required')}
-              ${carSelect(contact.car, 'question')}
-              ${field('note', t.note, contact.fields.note || '', '', true)}
-            </div>
-            <fieldset class="crm-status-options">
-              <legend>${t.crmStatus}</legend>
-              <div class="crm-choices">${statusOptions}</div>
-            </fieldset>
-            <p role="alert" class="ins-error"></p>
-            <div class="ins-actions">
-              <button type="submit" class="ins-primary">${ownerText('save')}</button>
-              <button type="button" class="ins-secondary" data-cancel-edit>${ownerText('cancel')}</button>
-            </div>
-          </form>`);
-        const form = card.querySelector('form');
-        const editErrors = () => {
-          const {name, reach} = values(form);
-          return {name: name ? '' : t.required, reach: validContact(reach) ? '' : t.reachError};
-        };
-        clearFixedErrors(form, editErrors);
-        if (contact.car && !form.elements.car.value) form.elements.car.add(new Option(contact.title || contact.car,contact.car,true,true));
-        card.classList.add('crm-editing');
-        form.elements.name.focus();
-        form.querySelector('[data-cancel-edit]').onclick = () => {
-          form.remove(); card.classList.remove('crm-editing'); edit.focus();
-        };
-        form.onsubmit = async event => {
-          event.preventDefault();
-          const {name,reach,note,car,status} = values(form);
-          if (submitting || !validation(form, editErrors())) return;
-          submitting=true;
-          try {
-            await api(endpoint,'PUT',{revision:contact.revision,status,car,fields:{name,reach,note}});
-            await refresh(contact.id);
-          } catch (err) {form.querySelector('[role=alert]').textContent=err.message==='conflict'?t.reloadRequest:t.sendError;}
-          finally { submitting=false; }
-        };
-      };
-      remove.onclick = async () => {
-        if (submitting || !window.confirm(contact.fields.name+' — '+t.crmConfirm)) return;
-        submitting=true;
-        try {
-          await api(endpoint,'DELETE',{revision:contact.revision});
-          location.replace(makeOwnerURL('enquiries',statusQuery));
-        } catch(err) {output.textContent=err.message==='conflict'?t.reloadRequest:t.sendError;}
-        finally {submitting=false;}
-      };
-    }
     panel.querySelectorAll('[data-state],[data-undo]').forEach((button) => {
       button.onclick = async () => {
         if (submitting) return;
