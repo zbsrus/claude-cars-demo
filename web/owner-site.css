@@ -146,3 +146,7 @@
   outline: 3px solid #406d93; outline-offset: 3px;
 }
 .os-block h2[id] { scroll-margin-top: 18px; }
+.os-received-review { padding-block: 14px; border-block-start: 1px solid var(--line); overflow-wrap: anywhere; }
+.os-received-review p { white-space: pre-wrap; margin-top: 6px; }
+.os-received-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 12px; color: var(--muted); font-size: .9rem; }
+.os-received-meta strong { color: var(--green); }

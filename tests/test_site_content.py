@@ -73,6 +73,32 @@ class SiteContent(unittest.TestCase):
         match = re.search(rb"window.CC=(.*?);</script>", html)
         return json.loads(match.group(1)), html.decode()
 
+    def test_received_review_is_private_until_explicit_publication(self):
+        root = "/api/owner/reviews"
+        ident = "guest-" + "a" * 32
+        private_id = "guest-" + "b" * 32
+        feedback = {"id": ident, "rating": 5, "language": "fr", "comment": "Avis reçu en test.", "permission": True}
+        self.assertEqual(self.request(root)[0], 401)
+        self.assertEqual(self.request("/api/reviews", method="POST", value=dict(feedback, rating=0))[0], 400)
+        for _ in range(2):
+            self.assertEqual(self.request("/api/reviews", method="POST", value=feedback)[0], 201)
+        self.assertEqual(self.request("/api/reviews", method="POST", value=dict(feedback, comment="Changed"))[0], 409)
+        self.assertEqual(self.request("/api/reviews", method="POST",
+                         value=dict(feedback, id=private_id, comment="Privé.", permission=False))[0], 201)
+        self.assertEqual(len(self.request(root, owner=True)[2]["reviews"]), 2)
+        for path in ("/fr/", "/fr/about"):
+            self.assertNotIn(feedback["comment"], self.state(path)[1])
+        quote = {"id": ident, "author": "Anonyme", "language": "fr", "rating": 5, "quote": feedback["comment"]}
+        self.assertEqual(self.save("reviews", 0, "publish", {"reviews": [dict(quote, id=private_id)]})[0], 400)
+        self.assertEqual(self.save("reviews", 0, "draft", {"reviews": [quote]})[0], 200)
+        self.assertNotIn(feedback["comment"], self.state("/fr/about")[1])
+        self.assertEqual(self.save("reviews", 1, "publish", {"reviews": [quote]})[0], 200)
+        self.assertEqual(self.state("/fr/about")[0]["siteContent"]["reviews"]["reviews"][0]["id"], ident)
+        self.assertEqual(self.request(root, method="PUT", value={"id": ident})[0], 401)
+        self.assertEqual(self.request(root, method="PUT", value={"id": ident}, owner=True)[0], 200)
+        self.assertEqual([r["id"] for r in self.request(root, owner=True)[2]["reviews"]], [private_id])
+        self.assertNotIn("Privé.", self.state("/fr/about")[1])
+
     def test_visibility_retry_discard_and_restore(self):
         api = "/api/owner/site/home"
         self.assertEqual(self.request(api)[0], 401)
@@ -140,7 +166,7 @@ class SiteContent(unittest.TestCase):
     def test_sections_conflict_validation_and_contacts(self):
         body = {"author": "Visiteur du test", "id": "test-1", "language": "fr", "quote": "Exemple privé.",
                 "reply": "Réponse privée.", "source": "https://example.com/avis"}
-        review = {"reviews": [body, dict(body, id="test-2", rating=4)]}
+        review = {"reviews": [dict(body, date="2020-02-24"), dict(body, id="test-2", rating=4)]}
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(lambda v: self.save("reviews", 0, "draft", v), [review, {"reviews": []}]))
         self.assertEqual(sorted(code for code, _ in results), [200, 409])
@@ -149,8 +175,11 @@ class SiteContent(unittest.TestCase):
         self.assertEqual((status, bad), (400, {"error": "invalid", "field": "reviews.0.source"}))
         status, bad = self.save("reviews", 1, "draft", {"reviews": [dict(body, rating=6)]})
         self.assertEqual((status, bad), (400, {"error": "invalid", "field": "reviews.0.rating"}))
+        status, bad = self.save("reviews", 1, "draft", {"reviews": [dict(body, date="2020-02-30")]})
+        self.assertEqual((status, bad), (400, {"error": "invalid", "field": "reviews.0.date"}))
         self.assertEqual(self.save("reviews", 1, "publish", review)[1]["published"], review)
         self.assertEqual(self.state("/fr/about")[0]["siteContent"]["reviews"], review)
+        self.assertEqual(self.state("/fr/")[0]["siteContent"]["reviews"], review)
         for section, values, field in (
             ("services", {"texts": {"fr": {"servicesIntro": "a" * 4001}}}, "texts.fr.servicesIntro"),
             ("catalogue", {"texts": {"en": {"story": "test"}}}, "texts.en.story"),

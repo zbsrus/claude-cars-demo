@@ -2,6 +2,8 @@
 import hashlib
 import json
 import re
+import time
+from datetime import date
 from urllib.parse import urlsplit
 
 from catalogue import LANGS, Problem, UPLOAD_PATH, string
@@ -23,6 +25,8 @@ IMAGE_KEYS = {"home": "hero", "profile": "portrait"}
 CONTACT_LIMITS = {"phone": 40, "whatsapp": 40, "email": 254, "address": 400,
                   "facebook": 2048, "company": 400, "vat": 80}
 ACTIVE_CARS = ("available", "soon", "reserved")
+REVIEW_RETENTION = 90 * 86400
+REVIEW_ID = re.compile(r"guest-[a-f0-9]{32}")
 
 
 class InvalidField(Problem):
@@ -36,6 +40,75 @@ def initialize(db):
         section TEXT PRIMARY KEY, revision INTEGER NOT NULL,
         draft TEXT NOT NULL, published TEXT NOT NULL, last_request TEXT NOT NULL
     )""")
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS visitor_reviews (
+            id TEXT PRIMARY KEY, created INTEGER NOT NULL,
+            rating INTEGER NOT NULL, language TEXT NOT NULL, comment TEXT NOT NULL,
+            permission INTEGER NOT NULL, archived INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS visitor_reviews_inbox ON visitor_reviews(archived, created);
+        CREATE TABLE IF NOT EXISTS review_limits (
+            client TEXT PRIMARY KEY, since INTEGER NOT NULL, count INTEGER NOT NULL
+        );
+    """)
+
+
+def expire_reviews(db):
+    now = int(time.time())
+    db.execute("DELETE FROM visitor_reviews WHERE created <= ?", (now - REVIEW_RETENTION,))
+    db.execute("DELETE FROM review_limits WHERE since <= ?", (now - 3600,))
+
+
+def review_id(value):
+    if not isinstance(value, str) or not REVIEW_ID.fullmatch(value):
+        raise InvalidField("id")
+    return value
+
+
+def receive_review(db, raw, client):
+    mapping(raw, ("id", "rating", "language", "comment", "permission"), "request")
+    ident = review_id(raw.get("id"))
+    rating, language = raw.get("rating"), raw.get("language")
+    if type(rating) is not int or not 1 <= rating <= 5:
+        raise InvalidField("rating")
+    if language not in LANGS:
+        raise InvalidField("language")
+    comment = clean_text(raw.get("comment", ""), 500, "comment")
+    permission = raw.get("permission", False)
+    if type(permission) is not bool:
+        raise InvalidField("permission")
+    state = (rating, language, comment, int(permission and bool(comment)))
+    db.execute("BEGIN IMMEDIATE")
+    now = int(time.time())
+    previous = db.execute("SELECT rating,language,comment,permission FROM visitor_reviews WHERE id=?", (ident,)).fetchone()
+    if previous is not None:
+        if previous != state:
+            raise Problem("conflict", 409)
+        return
+    limit = db.execute("SELECT since,count FROM review_limits WHERE client=?", (client,)).fetchone()
+    if not limit or limit[0] <= now - 3600:
+        db.execute("INSERT OR REPLACE INTO review_limits VALUES(?,?,1)", (client, now))
+    elif limit[1] >= 8:
+        raise Problem("rate_limited", 429)
+    else:
+        db.execute("UPDATE review_limits SET count=count+1 WHERE client=?", (client,))
+    db.execute("INSERT INTO visitor_reviews(id,created,rating,language,comment,permission) VALUES(?,?,?,?,?,?)",
+               (ident, now, *state))
+
+
+def review_inbox(db):
+    fields = ("id", "created", "rating", "language", "comment", "permission")
+    items = [dict(zip(fields, row)) for row in db.execute("""
+        SELECT id,created,rating,language,comment,permission FROM visitor_reviews
+        WHERE archived=0 AND created>? ORDER BY created DESC,rowid DESC LIMIT 100
+    """, (int(time.time()) - REVIEW_RETENTION,))]
+    return {"reviews": items}
+
+
+def archive_review(db, raw):
+    mapping(raw, ("id",), "request")
+    if not db.execute("UPDATE visitor_reviews SET archived=1 WHERE id=?", (review_id(raw.get("id")),)).rowcount:
+        raise Problem("missing", 404)
 
 
 def check_section(section):
@@ -172,7 +245,7 @@ def reviews(value):
     seen = set()
     for index, entry in enumerate(value):
         field = f"reviews.{index}"
-        mapping(entry, ("id", "author", "language", "quote", "reply", "source", "rating"), field)
+        mapping(entry, ("id", "author", "language", "quote", "reply", "source", "rating", "date"), field)
         ident = clean_text(entry.get("id"), 64, field + ".id", required=True)
         if not re.fullmatch("[a-zA-Z0-9_-]+", ident) or ident in seen:
             raise InvalidField(field + ".id")
@@ -189,6 +262,14 @@ def reviews(value):
             item[key] = clean_text(entry.get(key, ""), limit, field + "." + key, required=key in ("author", "quote"))
         if item["source"]:
             https_url(item["source"], field + ".source")
+        original_date = clean_text(entry.get("date", ""), 10, field + ".date")
+        if original_date:
+            try:
+                if date.fromisoformat(original_date).isoformat() != original_date:
+                    raise ValueError()
+            except ValueError:
+                raise InvalidField(field + ".date") from None
+            item["date"] = original_date
         result.append(item)
     return result
 
@@ -211,6 +292,13 @@ def validated(db, section, values, state):
             data = featured(db, raw, existing)
         elif key == "reviews":
             data = reviews(raw)
+            existing = {r["id"] for r in state["draft"].get(key, []) + state["published"].get(key, [])}
+            for index, item in enumerate(data):
+                ident = item["id"]
+                if REVIEW_ID.fullmatch(ident) and ident not in existing and not db.execute(
+                        "SELECT 1 FROM visitor_reviews WHERE id=? AND permission=1 AND archived=0 AND created>?",
+                        (ident, int(time.time()) - REVIEW_RETENTION)).fetchone():
+                    raise InvalidField(f"reviews.{index}.id")
         if data or key in ("featured", "reviews"):
             result[key] = data
     return result

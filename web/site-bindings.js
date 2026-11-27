@@ -64,44 +64,6 @@
     label(document.querySelector(".cc-privacy-copy > section + p"), copy.privacyDraft);
   }
 
-  const comments = site.reviews?.reviews;
-  if (page === "about" && comments?.length) {
-    const translations = {
-      fr:["Avis des clients","Réponse de Claude","Lire l’original"],
-      nl:["Ervaringen van klanten","Antwoord van Claude","Lees het origineel"],
-      de:["Kundenstimmen","Antwort von Claude","Original lesen"],
-      en:["Customer reviews","Claude’s reply","Read the original"],
-      es:["Opiniones de clientes","Respuesta de Claude","Leer el original"]
-    };
-    const [heading, reply, original] = translations[lang];
-    const make = (tag, text) => { const el = document.createElement(tag); el.textContent = text; return el; };
-    const section = document.createElement("section");
-    section.className = "cc-wrap cc-section";
-    const title = make("h2", heading);
-    title.className = "cc-section-title";
-    section.append(title);
-    for (const item of comments) {
-      const figure = document.createElement("figure");
-      const quote = make("blockquote", item.quote);
-      quote.lang = item.language;
-      const author = make("figcaption", item.rating ? item.author + " · " + item.rating + "/5" : item.author);
-      figure.append(quote, author);
-      if (item.reply) {
-        const response = make("p", item.reply);
-        response.lang = item.language;
-        figure.append(make("strong", reply), response);
-      }
-      if (item.source) {
-        const link = make("a", original);
-        link.href = item.source;
-        link.rel = "noreferrer";
-        figure.append(link);
-      }
-      section.append(figure);
-    }
-    document.querySelector(".cc-about-band")?.after(section);
-  }
-
   const contacts = site.contact?.contacts || {};
   const {phone, email, address, company, vat, facebook, whatsapp} = contacts;
   function lines(element, parts) {

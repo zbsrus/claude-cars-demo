@@ -82,6 +82,16 @@
     }
     let snapshot = await api(apiPath(section));
     if (!isCurrent()) return;
+    let received = [];
+    let inboxFailed = false;
+    async function loadInbox() {
+      try {
+        received = (await api("/api/owner/reviews")).reviews;
+        inboxFailed = false;
+      } catch { inboxFailed = true; }
+    }
+    if (section === "reviews") await loadInbox();
+    if (!isCurrent()) return;
     let values = copy(snapshot.draft);
     let revision = snapshot.revision;
     let language = lang;
@@ -128,9 +138,9 @@
     }
     const textInput = (path, name, val, key, opts = {}) => {
       const id = "os-" + path.replaceAll(".", "-");
-      const attrs = `id="${id}" data-path="${path}" maxlength="${limits[key] || 4000}"${opts.required ? " required" : ""}${opts.lang ? ` lang="${opts.lang}"` : ""}`;
+      const attrs = `id="${id}" data-path="${path}" maxlength="${limits[key] || 4000}"${opts.required ? " required" : ""}${opts.readonly ? " readonly" : ""}${opts.lang ? ` lang="${opts.lang}"` : ""}`;
       const large = multiline.has(key) || key.endsWith("Text") || key.endsWith("Intro");
-      const type = key === "email" ? "email" : ["source", "facebook"].includes(key) ? "url" : ["phone", "whatsapp"].includes(key) ? "tel" : "text";
+      const type = ["email", "date"].includes(key) ? key : ["source", "facebook"].includes(key) ? "url" : ["phone", "whatsapp"].includes(key) ? "tel" : "text";
       const hint = ["phone", "whatsapp"].includes(key) ? w("numberHint") : ["source", "facebook"].includes(key) ? "https://…" : "";
       return `<div class="ow-field"><label for="${id}">${esc(name)}</label>${hint ? `<small id="${id}-hint">${esc(hint)}</small>` : ""}${large ?
         `<textarea ${attrs} rows="${String(val).length > 240 ? 5 : 3}">${esc(val)}</textarea>` :
@@ -165,9 +175,24 @@
     }
     function reviewFields() {
       const reviews = values.reviews || [];
-      return block(w("reviews"), (reviews.length ? reviews.map((r, i) =>
+      const receivedCards = received.map(item => {
+        const inEditor = reviews.some(r => r.id === item.id) || snapshot.published.reviews?.some(r => r.id === item.id);
+        const date = new Date(item.created * 1000);
+        const stamp = new Intl.DateTimeFormat(lang, {dateStyle:"medium", timeZone:"Europe/Brussels"}).format(date);
+        return `<article class="os-received-review">
+          <div class="os-received-meta"><strong>${esc(item.rating)}/5</strong><time datetime="${date.toISOString()}">${esc(stamp)}</time><span>${esc(item.language.toUpperCase())}</span></div>
+          ${item.comment ? `<p lang="${esc(item.language)}">${esc(item.comment)}</p>` : ""}
+          <p class="os-hint">${esc(w(item.permission ? "feedbackAllowed" : "feedbackPrivate"))}</p>
+          <div class="os-actions">${item.permission && !inEditor && reviews.length < 30 ? button("prepare-" + item.id, w("feedbackPrepare")) : ""}
+          ${button("archive-" + item.id, w("feedbackArchive"))}</div></article>`;
+      }).join("");
+      const inbox = block(w("feedbackInbox"), inboxFailed
+        ? `<p>${esc(w("feedbackInboxError"))}</p>` + button("reload-inbox", w("feedbackReload"))
+        : receivedCards || `<p>${esc(w("feedbackEmpty"))}</p>`, w("feedbackInboxNote"), "inbox");
+      return inbox + block(w("reviews"), (reviews.length ? reviews.map((r, i) =>
         `<fieldset class="os-review"><legend>${esc(w("review"))} ${i + 1}</legend>
-        ${textInput(`reviews.${i}.author`, w("author"), r.author, "author", {required: true})}
+        ${textInput(`reviews.${i}.author`, w("author"), r.author, "author", {required: true, readonly: /^guest-[a-f0-9]{32}$/.test(r.id)})}
+        ${textInput(`reviews.${i}.date`, w("reviewDate"), r.date, "date")}
         <div class="ow-field"><label for="os-review-lang-${i}">${esc(w("reviewLang"))}</label><select data-path="reviews.${i}.language" id="os-review-lang-${i}">${langOptions(r.language)}</select></div>
         <div class="ow-field"><label for="os-reviews-${i}-rating">${esc(w("rating"))}</label><select data-path="reviews.${i}.rating" id="os-reviews-${i}-rating"><option value="">${esc(w("noRating"))}</option>${[1,2,3,4,5].map(n => `<option value="${n}"${r.rating === n ? " selected" : ""}>${n}/5</option>`).join("")}</select></div>
         ${["quote", "reply", "source"].map(key => textInput(`reviews.${i}.${key}`, w(key), r[key], key, {required: key === "quote", lang: key === "source" ? "" : r.language})).join("")}
@@ -209,7 +234,7 @@
       } else if (section === "reviews") {
         parts.push(`<h2>${esc(w("reviews"))}</h2>`);
         for (const r of values.reviews || []) {
-          parts.push(`<blockquote lang="${esc(r.language)}">${r.rating ? `<b>${r.rating}/5</b>` : ""}<p>${esc(r.quote)}</p><cite>${esc(r.author)}</cite>${r.reply ? `<p><b lang="${lang}">${esc(w("replyBy"))}</b><br>${esc(r.reply)}</p>` : ""}${r.source ? `<small>${esc(r.source)}</small>` : ""}</blockquote>`);
+          parts.push(`<blockquote lang="${esc(r.language)}">${r.rating ? `<b>${r.rating}/5</b>` : ""}<p>${esc(r.quote)}</p><cite>${esc(r.author)}</cite>${r.date ? ` <time datetime="${esc(r.date)}">${esc(r.date)}</time>` : ""}${r.reply ? `<p><b lang="${lang}">${esc(w("replyBy"))}</b><br>${esc(r.reply)}</p>` : ""}${r.source ? `<small>${esc(r.source)}</small>` : ""}</blockquote>`);
         }
         if (!values.reviews?.length) parts.push(`<p>${esc(w("noneReview"))}</p>`);
       } else {
@@ -237,7 +262,7 @@
       }
       if (section === "contact") for (const key of Object.keys(contacts)) add(label(key), contactValue(theirs, key), contactValue(values, key));
       if (section === "reviews") {
-        const summary = v => (v.reviews || []).map(r => [r.author, r.language?.toUpperCase(), r.rating ? r.rating + "/5" : "", r.quote, r.reply, r.source].filter(Boolean).join("\n")).join("\n\n");
+        const summary = v => (v.reviews || []).map(r => [r.author, r.date, r.language?.toUpperCase(), r.rating ? r.rating + "/5" : "", r.quote, r.reply, r.source].filter(Boolean).join("\n")).join("\n\n");
         add(w("reviews"), summary(theirs), summary(values));
       }
       return block(w("compare"), rows.join("") + `<p>${esc(w("keepCheck"))}</p><div class="os-actions">${button("use-latest", w("useLatest"))}${button("keep-mine", w("keepMine"))}</div>`);
@@ -299,7 +324,8 @@
       const [group, pos, field] = path.split(".");
       if (group === "reviews") {
         const review = values.reviews[Number(pos)];
-        if (field !== "rating") review[field] = value;
+        if (field === "date" && !value) delete review.date;
+        else if (field !== "rating") review[field] = value;
         else if (value) review.rating = Number(value);
         else delete review.rating;
       }
@@ -428,7 +454,7 @@
         draw("#os-position-" + Math.min(i, pinned.length));
       } else if (el.tagName === "SELECT" && el.dataset.path) updatePath(el.dataset.path, el.value);
     }
-    function onClick(event) {
+    async function onClick(event) {
       const el = event.target.closest("[data-site-action]");
       if (!el || !isCurrent() || busy) return;
       const action = el.dataset.siteAction;
@@ -466,6 +492,29 @@
         } else commit(confirmation);
       } else if (action === "reset-image") {
         delete values.images; message = ""; error = false; draw("#os-image");
+      } else if (action === "reload-inbox") {
+        locked(true);
+        await loadInbox();
+        if (isCurrent()) { locked(false); draw("#os-group-inbox"); }
+      } else if (action.startsWith("prepare-guest-")) {
+        const item = received.find(row => row.id === action.slice(8));
+        const reviews = values.reviews || (values.reviews = []);
+        if (!item?.permission || reviews.length >= 30 || reviews.some(r => r.id === item.id)) return;
+        const anonymous = window.CCOwnerSiteWords("feedbackAnonymous", item.language);
+        const date = new Intl.DateTimeFormat("sv-SE", {year:"numeric", month:"2-digit", day:"2-digit", timeZone:"Europe/Brussels"}).format(new Date(item.created * 1000));
+        reviews.push({id:item.id, author:anonymous, language:item.language, quote:item.comment, rating:item.rating, date, reply:"", source:""});
+        message = w("feedbackPrepared"); error = false; draw(`#os-reviews-${reviews.length - 1}-quote`);
+      } else if (action.startsWith("archive-guest-")) {
+        const id = action.slice(8);
+        locked(true);
+        try {
+          await api("/api/owner/reviews", "PUT", {id});
+          if (!isCurrent()) return;
+          await loadInbox();
+          if (!isCurrent()) return;
+          message = w("feedbackArchived"); error = false;
+        } catch (err) { if (isCurrent()) { message = t(err.message) || t("failure"); error = true; } }
+        finally { if (isCurrent()) { locked(false); draw("#os-group-inbox"); } }
       } else if (action === "add-review") {
         const reviews = values.reviews || (values.reviews = []);
         const id = crypto.randomUUID?.() || Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join("");

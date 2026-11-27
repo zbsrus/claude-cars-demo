@@ -463,6 +463,38 @@ body[data-page="home"] #mast { background: var(--studio-wall); border-bottom-col
 .cc-perspective .cc-text-link, .cc-perspective .cc-doc-link { justify-content: flex-start; color: var(--green); }
 .cc-perspective img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; background: var(--photo-matte); }
 .cc-perspective figcaption { padding: 8px var(--page-gutter) 0; }
+.cc-reviews { background: var(--page-paper); padding-block: var(--page-band-space); }
+.cc-reviews .cc-section-title { color: var(--green-dark); margin-block-end: clamp(23px, 4vw, 58px); }
+.cc-review-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr)); gap: clamp(22px, 4.5vw, 72px); }
+.cc-review { min-width: 0; border-top: 1px solid var(--line); padding-block-start: clamp(16px, 2vw, 30px); overflow-wrap: anywhere; }
+.cc-review blockquote { margin: 0 0 15px; max-width: 39ch; font: 400 clamp(23px, 2.1vw, 34px)/1.22 var(--display); color: var(--green-dark); }
+.cc-review figcaption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; color: var(--muted); font-size: .875rem; }
+.cc-review figcaption strong { color: var(--ink); }
+.cc-review-reply { margin-top: 16px; border-inline-start: 1px solid var(--line); padding-inline-start: 13px; max-width: 55ch; }
+.cc-review-reply strong, .cc-review .cc-text-link { font-size: .875rem; }
+.cc-review .cc-text-link { margin-top: 3px; }
+.cc-feedback { background: var(--page-sage); padding-block: var(--page-band-space); }
+.cc-feedback-inner { display: grid; align-items: start; gap: clamp(24px, 5vw, 76px); }
+.cc-feedback .cc-section-title { color: var(--green-dark); margin-block-end: 12px; }
+.cc-feedback .cc-prose { max-width: 36ch; }
+.cc-feedback-form fieldset { border: 0; margin: 0 0 16px; padding: 0; min-inline-size: 0; }
+.cc-feedback-form legend, .cc-feedback-form > label[for] { color: var(--ink); font-weight: 650; }
+.cc-feedback-stars { display: flex; flex-wrap: wrap; gap: 3px; margin-block-start: 4px; }
+.cc-feedback-stars label { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 4px; color: var(--green); cursor: pointer; }
+.cc-feedback-stars input { position: absolute; inset: 0; opacity: 0; margin: 0; width: 100%; height: 100%; cursor: pointer; }
+.cc-feedback-star { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.35; pointer-events: none; }
+.cc-feedback-stars label:has(input:checked, ~ label input:checked) .cc-feedback-star { fill: currentColor; }
+.cc-feedback-stars label:has(input:focus-visible) { outline: 3px solid #2c7699; outline-offset: -2px; }
+@media (hover: hover) { .cc-feedback-stars label:hover { background: #cfddce; } }
+.cc-feedback-form textarea { box-sizing: border-box; display: block; width: 100%; min-height: 90px; padding: 12px; margin: 7px 0 5px; resize: vertical; color: var(--ink); background: var(--page-paper); border: 1px solid #839486; border-radius: 5px; }
+.cc-feedback-form textarea::placeholder, .cc-feedback-hint { color: var(--muted); }
+.cc-feedback-hint { font-size: .875rem; margin-block-end: 12px; }
+.cc-feedback-permission:not([hidden]) { display: flex; align-items: center; min-height: 44px; gap: 9px; margin-block-end: 12px; }
+.cc-feedback-permission input { inline-size: 17px; block-size: 17px; flex: none; accent-color: var(--green); }
+.cc-feedback-form .cc-feedback-privacy { margin-inline-start: 14px; font-size: .875rem; overflow-wrap: anywhere; }
+.cc-feedback-message:not(:empty) { margin-top: 12px; color: var(--green-dark); font-weight: 650; }
+@media (min-width: 850px) { .cc-feedback-inner { grid-template-columns: minmax(0, .86fr) minmax(0, 1.14fr); } }
+@media (forced-colors: active) { .cc-feedback-stars input { opacity: 1; position: static; width: auto; height: auto; } .cc-feedback-star { width: 18px; height: 18px; } }
 .cc-services { background: var(--page-warm); padding-block: var(--page-band-space); scroll-margin-top: 0; }
 .cc-services-inner { display: grid; gap: 19px clamp(40px, 8vw, 144px); align-items: center; }
 .cc-services .cc-section-title { color: var(--green-dark); text-wrap: initial; }

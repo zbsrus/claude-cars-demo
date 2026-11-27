@@ -132,6 +132,7 @@ def credential_key(directory, password):
 def clean_expired(db_path):
     with catalog.connection(db_path) as db:
         enquiries.expire(db)
+        site_content.expire_reviews(db)
         now = int(time.time())
         db.execute("DELETE FROM login_attempts WHERE since<?", (now - 600,))
         db.execute("DELETE FROM sessions WHERE expires<=?", (now,))
@@ -296,6 +297,9 @@ class SiteRequest:
             return
         if path.startswith("/api/owner/"):
             self.require_owner()
+            if path == "/api/owner/reviews":
+                self.reply(site_content.review_inbox(self.db))
+                return
             section = re.fullmatch(r"/api/owner/site/([a-z]+)", path)
             if section:
                 self.reply(site_content.read(self.db, section[1]))
@@ -537,6 +541,11 @@ class SiteRequest:
         if post and path == "/api/activity":
             self.record_click()
             return
+        if post and path == "/api/reviews":
+            site_content.receive_review(self.db, self.json_body(limit=8 * 1024), self.client_key())
+            self.db.commit()
+            self.reply({"ok": True}, 201)
+            return
         if post and path == "/api/enquiries":
             _, source = site_stats.referring_page(self.headers.get("Referer"), self.origin)
             values = self.json_body(limit=16 * 1024)
@@ -548,6 +557,11 @@ class SiteRequest:
             self.reply(acknowledgement, 201)
             return
         token, _ = self.require_owner(write=True)
+        if not post and path == "/api/owner/reviews":
+            site_content.archive_review(self.db, self.json_body(limit=1024))
+            self.db.commit()
+            self.reply({"ok": True})
+            return
         section = re.fullmatch(r"/api/owner/site/([a-z]+)", path)
         if not post and section:
             state = site_content.save(self.db, section[1], self.json_body(limit=2 * MIB))

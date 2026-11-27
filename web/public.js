@@ -276,6 +276,80 @@
       target + '">' + label + icon("arrow") + '</a></div></div><figure>' +
       photo("/assets/z4/3.webp", "", "", false, "(max-width: 849px) 100vw, 52vw") + '<figcaption>' + t("beforeVisitPhoto") + '</figcaption></figure></section>';
   }
+  const publishedReviews = state.siteContent?.reviews?.reviews || [];
+  const reviewDate = new Intl.DateTimeFormat(regions[lang], {dateStyle: "medium", timeZone: "UTC"});
+  function reviewsSection() {
+    if (!publishedReviews.length) return "";
+    return '<section class="cc-reviews" id="reviews" tabindex="-1" aria-labelledby="cc-reviews-title"><div class="cc-wrap">' +
+      '<h2 id="cc-reviews-title" class="cc-section-title">' + t("reviewTitle") + '</h2><div class="cc-review-list">' +
+      publishedReviews.map(item => {
+        const source = documentUrl(item.source);
+        const author = /^guest-[a-f0-9]{32}$/.test(item.id) ? t("feedbackAnonymous") : item.author;
+        const date = item.date && new Date(item.date);
+        const dateLabel = date && Number.isFinite(+date) ? '<time datetime="' + esc(item.date) + '">' + esc(reviewDate.format(date)) + '</time>' : "";
+        const rating = item.rating ? '<span>' + esc(item.rating) + '/5</span>' : "";
+        return '<figure class="cc-review"><blockquote lang="' + esc(item.language) + '"' + (source ? ' cite="' + esc(source) + '"' : "") + '><p>' + esc(item.quote) +
+          '</p></blockquote><figcaption><strong dir="auto">' + esc(author) + '</strong>' + dateLabel + rating + '</figcaption>' +
+          (item.reply ? '<div class="cc-review-reply"><strong>' + t("reviewReply") + '</strong><p lang="' + esc(item.language) + '">' + esc(item.reply) + '</p></div>' : "") +
+          (source ? '<a class="cc-text-link" href="' + esc(source) + '" rel="noreferrer" aria-label="' + esc(t("reviewOriginal") + " · " + author) + '">' + t("reviewOriginal") + icon("arrow") + '</a>' : "") + '</figure>';
+      }).join("") + '</div></div></section>';
+  }
+  function feedbackSection() {
+    const star = '<svg class="cc-feedback-star" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.5 2.8 6 6.5.8-4.8 4.6 1.2 6.6-5.7-3.2-5.7 3.2 1.2-6.6-4.8-4.6 6.5-.8Z"/></svg>';
+    const ratings = [1, 2, 3, 4, 5].map(score =>
+      '<label><input type="radio" name="rating" value="' + score + '" required aria-label="' + score + '/5">' + star + '</label>').join("");
+    return '<section id="feedback" class="cc-feedback" tabindex="-1" aria-labelledby="cc-feedback-title"><div class="cc-wrap cc-feedback-inner">' +
+      '<div><h2 id="cc-feedback-title" class="cc-section-title">' + t("feedbackTitle") + '</h2><p class="cc-prose">' + t("feedbackIntro") + '</p></div>' +
+      '<div><form class="cc-feedback-form"><fieldset><legend>' + t("feedbackRating") + '</legend><div class="cc-feedback-stars">' + ratings + '</div></fieldset>' +
+      '<label for="cc-feedback-comment">' + t("feedbackComment") + '</label><textarea id="cc-feedback-comment" name="comment" rows="3" maxlength="500" aria-describedby="cc-feedback-hint" placeholder="' + esc(t("feedbackPrompt")) + '"></textarea>' +
+      '<p id="cc-feedback-hint" class="cc-feedback-hint">' + t("feedbackNoDetails") + '</p><label class="cc-feedback-permission" hidden><input type="checkbox" name="permission"> <span>' + t("feedbackPermission") + '</span></label>' +
+      '<button type="submit" class="cc-button">' + t("feedbackSend") + '</button><a class="cc-text-link cc-feedback-privacy" href="' + path("privacy") + '#review-privacy">' + t("privacy") + '</a></form>' +
+      '<p class="cc-feedback-message" role="status" tabindex="-1"></p></div></div></section>';
+  }
+  function bindFeedback() {
+    const form = document.querySelector(".cc-feedback-form");
+    if (!form) return;
+    const {comment, permission} = form.elements;
+    const consent = permission.closest("label");
+    const button = form.querySelector("button[type=submit]");
+    const message = form.parentElement.querySelector(".cc-feedback-message");
+    const sync = () => {
+      consent.hidden = !comment.value.trim();
+      if (consent.hidden) permission.checked = false;
+    };
+    comment.addEventListener("input", sync);
+    sync();
+    let id, busy = false;
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (busy) return;
+      id ||= "guest-" + Array.from(crypto.getRandomValues(new Uint8Array(16)), n => n.toString(16).padStart(2,"0")).join("");
+      const data = {id, language: lang, rating: Number(form.elements.rating.value), comment: comment.value.trim(), permission: permission.checked};
+      busy = true;
+      for (const control of form.querySelectorAll("input, textarea, button")) control.disabled = true;
+      message.textContent = t("feedbackSending");
+      try {
+        const response = await fetch("/api/reviews", {method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(data), signal: AbortSignal.timeout?.(10000)});
+        if (response.status === 409) {
+          message.textContent = t("feedbackConflict");
+          form.hidden = true;
+        } else if (response.ok && (await response.json()).ok === true) {
+          message.textContent = t("feedbackThanks");
+          form.hidden = true;
+        } else {
+          message.textContent = t(response.status === 429 ? "feedbackLimit" : "feedbackFail");
+        }
+      } catch {
+        message.textContent = t("feedbackFail");
+      } finally {
+        busy = false;
+        for (const control of form.querySelectorAll("input, textarea, button")) control.disabled = false;
+        if (form.hidden) message.focus();
+        else button.focus();
+      }
+    });
+  }
   function home() {
     const stock = active.length ? inventory(active, "h3", "stock-items", true) :
       '<div class="cc-wrap"><p class="cc-empty">' + t("noCars") + '</p><a class="cc-text-link" href="#services">' + t("services") + icon("down") + '</a></div>';
@@ -284,7 +358,7 @@
       '<section id="stock" class="cc-section cc-stock" tabindex="-1" aria-labelledby="cc-stock-title">' +
       '<div class="cc-wrap cc-stock-header"><h2 id="cc-stock-title" class="cc-section-title">' + t("featured") + '</h2>' +
       (active.length ? '<div class="cc-inventory-aside"><p>' + icon("clock") + t("appointment") + '</p>' + inventoryToolbar("stock-items") + '</div>' : "") +
-      '</div>' + stock + '</section>' + archive + beforeVisit() + services() + '</div>';
+      '</div>' + stock + '</section>' + archive + beforeVisit() + reviewsSection() + services() + '</div>';
   }
   function catalogue() {
     const targets = [active.length && "stock-items", sold.length && "archive-items"].filter(Boolean).join(" ");
@@ -300,8 +374,9 @@
       '</p></div></div><img class="cc-claude-portrait" src="/assets/identity/claude-portrait.webp" srcset="/assets/identity/claude-portrait-600.webp 600w, /assets/identity/claude-portrait.webp 1080w" sizes="(max-width: 520px) 100vw, (max-width: 849px) 520px, (max-width: 1454px) 33vw, 480px" width="1080" height="1440" alt="' + esc(t("claudePortrait")) + '" fetchpriority="high" decoding="async"></div></header><section id="selection" class="cc-about-band" aria-labelledby="cc-about-selection"><div class="cc-wrap cc-story"><p class="cc-story-intro">' + t("story") +
       '</p><div><h2 id="cc-about-selection">' + t("selectionTitle") + '</h2><p class="cc-prose">' + t("selection") +
       '</p><div class="cc-actions">' + button(path("contact"),t("contactSeller")) +
+      '<a class="cc-text-link" href="#feedback">' + t("feedbackLink") + icon("down") + '</a>' +
       '<a class="cc-text-link" href="https://www.facebook.com/people/Claude-C/61566785224862/">' + t("reviews") + icon("arrow") +
-      '</a></div></div></div></section>' + services() + '</div>';
+      '</a></div></div></div></section>' + reviewsSection() + services() + feedbackSection() + '</div>';
   }
   function documentUrl(value) {
     if (!value) return "";
@@ -480,7 +555,7 @@
   main.setAttribute("tabindex","-1");
   if (page === "home") main.innerHTML = home();
   else if (page === "catalogue") main.innerHTML = catalogue();
-  else if (page === "about") main.innerHTML = about();
+  else if (page === "about") { main.innerHTML = about(); bindFeedback(); }
   else if (page === "privacy") {
     const section = (heading, body) => '<section><h2>' + t(heading) + '</h2><p>' + t(body) + '</p></section>';
     main.innerHTML = '<article class="cc-privacy"><header class="cc-privacy-cover"><div class="cc-wrap cc-lead"><h1>' + t("privacy") +
@@ -489,7 +564,8 @@
       section("privacyEnquiries", "privacyEnquiriesText") + section("privacySecurity", "privacySecurityText") +
       '<p>' + t("privacyDraft") + '</p><section><h2>' + t("privacyButtons") +
       '</h2><label class="cc-choice"><input type="checkbox" id="cc-count-buttons">' + t("privacyCount") +
-      '</label><p>' + t("privacyChoiceText") + '</p></section>' + section("privacyRights", "privacyRightsText") + '<a href="https://www.autoriteprotectiondonnees.be/citoyen">' + t("privacyAuthority") + '</a></div></article>';
+      '</label><p>' + t("privacyChoiceText") + '</p></section>' + section("privacyRights", "privacyRightsText") +
+      '<section id="review-privacy"><h2>' + t("reviewTitle") + '</h2><p>' + t("feedbackPrivacy") + '</p></section><a href="https://www.autoriteprotectiondonnees.be/citoyen">' + t("privacyAuthority") + '</a></div></article>';
     const choice = main.querySelector("#cc-count-buttons");
     choice.checked = countButtonsAllowed();
     choice.addEventListener("change", () => {
