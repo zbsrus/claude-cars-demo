@@ -1,0 +1,874 @@
+(() => {
+  'use strict';
+  const { lang, page, id, authenticated } = window.CC;
+  const cars = () => window.CC.cars || [];
+  const t = window.CCInsightsCopy[lang] || window.CCInsightsCopy.fr;
+  const locales = { fr: 'fr-BE', nl: 'nl-BE', de: 'de-BE', en: 'en-GB', es: 'es-ES' };
+  const locale = locales[lang];
+  const query = new URLSearchParams(location.search);
+  const types = ['question', 'viewing', 'sourcing', 'import'];
+  const formKey = 'claude-cars.insights.v1.form';
+  const dayFormat = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Brussels',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const dateFormat = new Intl.DateTimeFormat(locale, {
+    timeZone: 'Europe/Brussels',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const tickFormat = new Intl.DateTimeFormat(locale, { timeZone: 'UTC', day: 'numeric', month: 'short' });
+  const integer = new Intl.NumberFormat(locale);
+  const esc = (s) =>
+    String(s ?? '').replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+    );
+  const uid = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (n) => n.toString(16).padStart(2, '0')).join('');
+  const title = (car) => [car?.make, car?.model].filter(Boolean).join(' ');
+  const findCar = (carId) => cars().find((c) => c.id === carId);
+  const canViewCar = (car) => car?.status === 'available';
+  const carURL = (car) => location.origin + window.CCDemo.carPath(car,lang);
+  const dateKey = (time) => dayFormat.format(time);
+  const dayNumber = (key) => Math.floor(Date.parse(key + 'T00:00:00Z') / 86400000);
+  const asDay = (num) => num * 86400000;
+  function option(value, label, current) {
+    return `<option value="${esc(value)}"${value === current ? ' selected' : ''}>${esc(label)}</option>`;
+  }
+  function field(key, label, value, attrs = '', multiline = false) {
+    const control = multiline
+      ? `<textarea id="ins-${key}" name="${key}" maxlength="1800" rows="4" ${attrs}>${esc(value)}</textarea>`
+      : `<input id="ins-${key}" name="${key}" value="${esc(value)}" ${key === 'listingUrl' ? '' : 'maxlength="280"'} ${attrs}>`;
+    const required = attrs.split(' ').includes('required') ? ' <span aria-hidden="true">*</span>' : '';
+    return `<div class="ins-field"><label for="ins-${key}">${esc(label)}${required}</label>${control}<small data-err="${key}" id="ins-err-${key}"></small></div>`;
+  }
+  function carSelect(value, type) {
+    const viewing = type === 'viewing';
+    const opts = cars().filter((c) => viewing ? canViewCar(c) : c.status !== 'draft');
+    return `<div class="ins-field"><label for="ins-car">${t.car}${viewing ? ' <span aria-hidden="true">*</span>' : ''}</label><select id="ins-car" name="car" ${viewing ? 'required' : ''}>${option('', viewing ? t.chooseCar : t.general, value)}${opts.map((c) => option(c.id, title(c), value)).join('')}</select><small data-err="car" id="ins-err-car"></small></div>`;
+  }
+  function focusField(elem) {
+    if (elem?.tagName === 'SELECT' && window.CCSelect?.focus) window.CCSelect.focus(elem);
+    else elem?.focus();
+  }
+  function showFieldError(form, elem, error) {
+    const output = form.querySelector(`[data-err="${elem.name}"]`);
+    if (!output) return;
+    output.textContent = error || '';
+    if (error) {
+      elem.setAttribute('aria-invalid', 'true');
+      elem.setAttribute('aria-describedby', output.id);
+    } else {
+      elem.removeAttribute('aria-invalid');
+      elem.removeAttribute('aria-describedby');
+    }
+    if (elem.tagName === 'SELECT') window.CCSelect?.refresh?.(elem);
+  }
+  function validation(form, fields) {
+    let first;
+    for (const elem of form.elements) {
+      if (!Object.hasOwn(fields, elem.name)) continue;
+      const error = fields[elem.name];
+      showFieldError(form, elem, error);
+      if (error && !first) first = elem;
+    }
+    focusField(first);
+    return !first;
+  }
+  function clearFixedErrors(form, validate) {
+    const check = (event) => {
+      const elem = event.target;
+      if (elem.getAttribute('aria-invalid') === 'true') showFieldError(form, elem, validate()[elem.name]);
+    };
+    form.addEventListener('input', check);
+    form.addEventListener('change', check);
+  }
+  function values(form) {
+    return Object.fromEntries(Array.from(new FormData(form), ([k, v]) => [k, String(v).trim()]));
+  }
+  function validContact(value) {
+    return (
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ||
+      (/^[+\d()\s.\-]+$/.test(value) && value.replace(/\D/g, '').length >= 6)
+    );
+  }
+  function httpURL(value) {
+    try {
+      const url = new URL(value);
+      return /^https?:\/\//i.test(value) && ['http:', 'https:'].includes(url.protocol) && !!url.hostname && !url.username && !url.password;
+    } catch {
+      return false;
+    }
+  }
+  const detailFields = {
+    question: ['message'],
+    viewing: ['date', 'message'],
+    sourcing: ['model', 'budget', 'mileage', 'options', 'message'],
+    import: ['listingUrl', 'message'],
+    manual: ['note'],
+  };
+  const localClock = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Europe/Brussels',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  function wallTime() {
+    return localClock.format(new Date()).replace(' ', 'T');
+  }
+  function fieldValue(key, value) {
+    if (key === 'date') {
+      // A datetime-local field represents wall time at the garage.
+      const timestamp = Date.parse(value + 'Z');
+      if (Number.isFinite(timestamp)) {
+        const date = new Intl.DateTimeFormat(locale, {
+          timeZone: 'UTC',
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }).format(timestamp);
+        return `${date} (${t.dateLocal})`;
+      }
+    }
+    if (key === 'budget' || key === 'mileage')
+      return integer.format(Number(value)) + (key === 'budget' ? ' €' : ' km');
+    return value;
+  }
+  const detailLabels = {
+    date: 'requestedTime',
+    message: 'plainMessage',
+    options: 'preferredOptions',
+    budget: 'budgetLabel',
+    mileage: 'mileageLabel',
+    note: 'plainNote',
+  };
+  const requestPhrases = {
+    question: 'requestQuestion',
+    viewing: 'requestViewing',
+    sourcing: 'requestSourcing',
+    import: 'requestImport',
+  };
+  function buildMessage(r) {
+    const f = r.fields,
+      data = [t.hello, t[requestPhrases[r.type]], r.title, r.car ? carURL(r.car) : ''];
+    for (const key of detailFields[r.type] || []) {
+      if (f[key]) data.push(`${t[detailLabels[key] || key]}: ${fieldValue(key, f[key])}`);
+    }
+    data.push([f.name, f.reach].filter(Boolean).join(' · '));
+    return data.filter(Boolean).join('\n');
+  }
+
+  function contactPage() {
+    const root = document.getElementById('main');
+    if (!root) return;
+    const originCar = findCar(query.get('car'));
+    const canView = cars().some(canViewCar);
+    const availableTypes = types.filter((type) => type !== 'viewing' || canView);
+    const requestedType = types.includes(query.get('type')) ? query.get('type') : 'question';
+    function fallbackForViewing(carId) {
+      if (carId) {
+        const car = findCar(carId);
+        if (!canViewCar(car)) return ['soon', 'reserved'].includes(car?.status) ? 'question' : 'sourcing';
+      }
+      return canView ? '' : 'sourcing';
+    }
+    let viewingFallback = requestedType === 'viewing' ? fallbackForViewing(query.get('car')) : '';
+    const initialType = viewingFallback || requestedType;
+    const topic = query.get('topic');
+    const presetQuestion = viewingFallback === 'question' || (requestedType === 'question' && originCar && topic === 'availability')
+      ? t.askAvailability
+      : requestedType === 'question' && originCar && topic === 'documents' ? t.askRecords : '';
+    const initial = () => ({
+      type: initialType,
+      car: originCar?.id || '',
+      message: presetQuestion,
+    });
+    let draft = initial(),
+      leadId = uid(),
+      submission = { key: uid(), version: 1 },
+      attemptedVersion = 0,
+      uncertain = false,
+      prepared = false;
+    const signature = location.search;
+    let hasInput = false;
+    let receipt = null;
+    let returning = false;
+    let lastEdited = Date.now();
+    try {
+      const cache = JSON.parse(sessionStorage.getItem(formKey) || 'null');
+      if (cache && Date.now() - cache.updated >= 30 * 60 * 1000) sessionStorage.removeItem(formKey);
+      else if (cache?.signature === signature && cache.draft) {
+        sessionStorage.removeItem(formKey);
+        receipt = cache.receipt || null;
+        lastEdited = cache.updated;
+        returning = hasInput = !receipt;
+        draft = { ...draft, ...cache.draft };
+        if (presetQuestion && draft.message === cache.presetQuestion) draft.message = presetQuestion;
+        if (cache.submission?.key) {
+          leadId = cache.leadId;
+          submission = cache.submission;
+          attemptedVersion = cache.attemptedVersion;
+          uncertain = cache.uncertain;
+          if (cache.lang !== lang && attemptedVersion === submission.version) submission.version++;
+        }
+        prepared = cache.prepared;
+      }
+    } catch {
+      /* A new form can always be opened. */
+    }
+    const staleViewing = draft.type === 'viewing' ? fallbackForViewing(draft.car) : '';
+    if (staleViewing && !receipt) {
+      viewingFallback = staleViewing;
+      draft.type = staleViewing;
+      if (staleViewing === 'question' && !draft.message) draft.message = t.askAvailability;
+      prepared = false;
+      if (attemptedVersion === submission.version) submission.version++;
+    }
+    const back = originCar
+      ? `<a class="ins-back ins-car-back" href="${esc(carURL(originCar.id))}">← ${t.backCar} · ${esc(title(originCar))}</a>`
+      : '';
+    const contextual = !!originCar || types.includes(query.get('type'));
+    const titleKey = () => contextual ? draft.type : 'contactPage';
+    const introKey = () => contextual ? ({ question: 'questionIntro', viewing: 'viewingIntro', sourcing: 'sourcingIntro', import: 'importIntro' })[draft.type] : 'contactIntro';
+    root.innerHTML = `<div class="ins-contact"><header class="ins-contact-cover"><div class="cc-wrap ins-contact-intro">${back}<div class="ins-contact-lead"><h1>${t[titleKey()]}</h1><p>${t[introKey()]}</p></div></div></header><div class="cc-wrap ins-contact-grid"><section id="ins-formbox" class="ins-formbox"></section><aside class="ins-address"><h2>${t.contactDetails}</h2>
+      <address>Wanze · ${t.belgium}</address><p>${t.byAppointment}</p>
+      <a href="/claude-cars-demo/version-c/${lang}/privacy/">${t.privacy}</a></aside></div></div>`;
+
+    const box = document.getElementById('ins-formbox');
+    function associatedCar() {
+      return draft.type === 'import' ? null : findCar(draft.car);
+    }
+    function capture() {
+      const form = box.querySelector('form');
+      if (form) draft = { ...draft, ...values(form) };
+    }
+    function stash() {
+      if ((!hasInput && !prepared && !uncertain) || Date.now() - lastEdited >= 30 * 60 * 1000) return;
+      capture();
+      try {
+        sessionStorage.setItem(
+          formKey,
+          JSON.stringify({ signature, draft, leadId, submission, attemptedVersion, uncertain, lang,
+            prepared, presetQuestion, updated: lastEdited }),
+        );
+      } catch {}
+    }
+    window.addEventListener('pagehide', stash);
+    document.addEventListener('cc:languagechange', () => {
+      if (!receipt) return stash();
+      try {
+        sessionStorage.setItem(formKey, JSON.stringify({signature, draft: initial(), receipt, updated: Date.now()}));
+      } catch {}
+    });
+
+    function lead() {
+      const car = associatedCar();
+      const keys = ['name', 'reach', ...detailFields[draft.type]];
+      const fields = Object.fromEntries(keys.filter((key) => draft[key]).map((key) => [key, draft[key]]));
+      return {
+        id: leadId,
+        car: car?.id || '',
+        title: title(car),
+        type: draft.type,
+        lang,
+        fields,
+      };
+    }
+    function resetDraft() {
+      try { sessionStorage.removeItem(formKey); } catch {}
+      receipt = null;
+      hasInput = returning = false;
+      leadId = uid();
+      submission = { key: uid(), version: 1 };
+      attemptedVersion = 0;
+      uncertain = false;
+      draft = initial();
+      prepared = false;
+    }
+    function startAgain() {
+      resetDraft();
+      if (!availableTypes.includes(draft.type)) draft.type = 'sourcing';
+      draw();
+      focusField(box.querySelector('select'));
+    }
+    function showReceipt(request) {
+      receipt = request;
+      prepared = hasInput = false;
+      box.innerHTML = `<h2 tabindex="-1">${t.received}</h2><p>${t.receivedNote}</p>
+        <div class="ins-message" data-confirmed-message>${esc(buildMessage(request))}</div>
+        <button type="button" data-new class="ins-secondary">${t.newRequest}</button>`;
+      box.querySelector('[data-new]').onclick = startAgain;
+      box.querySelector('h2').focus();
+    }
+    function showPrepared() {
+      prepared = true;
+      const request = lead();
+      const msg = buildMessage(request);
+      const buttonLabel = () => attemptedVersion === submission.version ? t.retrySend :
+        uncertain ? t.sendCorrection : t.siteSend;
+      const recoveryNote = attemptedVersion === submission.version ? t.deliveryUncertain : t.correctionNote;
+      box.innerHTML = `<h2 tabindex="-1">${t.prepared}</h2><div class="ins-message">${esc(msg)}</div>
+        <p class="ins-note">${window.CCLegal.get("demoForms", lang)} <a href="/claude-cars-demo/version-c/${lang}/privacy" target="_blank" rel="noopener">${t.privacy}</a></p>
+        <p class="ins-error" role="alert">${uncertain ? recoveryNote : ''}</p>
+        <div class="ins-actions"><button type="button" class="ins-primary" data-send>${buttonLabel()}</button>
+        <button type="button" data-edit class="ins-text-btn">${t.edit}</button>
+        <button type="button" data-refresh-stock class="ins-secondary" hidden>${t.refreshStock}</button></div>`;
+      const send = box.querySelector('[data-send]');
+      const edit = box.querySelector('[data-edit]');
+      const alert = box.querySelector('[role="alert"]');
+      const refreshStock = box.querySelector('[data-refresh-stock]');
+      refreshStock.onclick = () => {
+        prepared = false;
+        hasInput = true;
+        if (attemptedVersion === submission.version) submission.version++;
+        stash();
+        location.reload();
+      };
+      edit.onclick = () => {
+        if (attemptedVersion === submission.version) submission.version++;
+        lastEdited = Date.now();
+        prepared = false;
+        draw();
+        focusField(box.querySelector('#ins-date') || box.querySelector('select'));
+      };
+      send.onclick = () => { alert.textContent = window.CC.demoNotice; };
+
+      box.querySelector('h2').focus();
+    }
+    function draw() {
+      const kind = draft.type;
+      root.querySelector('.ins-contact-lead h1').textContent = t[titleKey()];
+      root.querySelector('.ins-contact-lead p').textContent = t[introKey()];
+      if (kind === 'sourcing' && draft.car && draft.model === undefined)
+        draft.model = title(findCar(draft.car));
+      const showCar = kind !== 'import' && (kind !== 'sourcing' || !!draft.car || !!originCar);
+      const viewingNote = kind === viewingFallback ? (kind === 'question' ? t.availabilityNote : t.stockUnavailable) : '';
+      box.innerHTML = `<form novalidate>${returning ? `<p class="ins-draft-note" role="status">${t.resumed}</p>` : ''}${uncertain ? `<p class="ins-note">${t.correctionNote}</p>` : ''}<p class="ins-note">${window.CCLegal.get("demoForms", lang)}</p><p class="ins-instruction">${t.requiredFields}</p>${viewingNote ? `<p class="ins-note">${viewingNote}</p>` : ''}<div class="ins-field"><label for="ins-type">${t.type}</label><select id="ins-type" name="type">${availableTypes.map((k) => option(k, t[k], kind)).join('')}</select></div>
+      ${showCar ? carSelect(draft.car, kind) : ''}
+      ${kind === 'viewing' ? `<p class="ins-note">${t.appointmentNote} ${t.dateLocal}.</p>${field('date', t.date, draft.date, `type="datetime-local" min="${wallTime()}"`)}` : ''}
+      ${
+        kind === 'sourcing'
+          ? `<p class="ins-note">${t.deposit}</p>${field('model', t.model, draft.model, 'required')}
+      <div class="ins-pair">${field('budget', t.budget, draft.budget, 'type="number" inputmode="numeric" min="1" required')}${field('mileage', t.mileage, draft.mileage, 'type="number" inputmode="numeric" min="1" required')}</div>${field('options', t.options, draft.options)}`
+          : ''
+      }
+      ${kind === 'import' ? field('listingUrl', t.listingUrl, draft.listingUrl, 'type="url" inputmode="url" spellcheck="false" required') : ''}
+      ${field('message', kind === 'question' ? t.message : t.messageOpt, draft.message, kind === 'question' ? 'required' : '', true)}
+      <div class="ins-pair">${field('name', t.name, draft.name, 'autocomplete="name" required')}${field('reach', t.reach, draft.reach, 'autocomplete="on" spellcheck="false" required')}</div>
+      <p class="ins-note ins-before-review">${t.formHandoff} <a href="/claude-cars-demo/version-c/${lang}/privacy" target="_blank" rel="noopener">${t.privacy}</a></p>
+      <div class="ins-actions"><button class="ins-primary" type="submit">${t.prepare} <span aria-hidden="true">→</span></button><button type="button" class="ins-text-btn" data-clear ${hasInput && !uncertain ? '' : 'hidden'}>${t.clearDraft}</button></div></form>`;
+      const form = box.querySelector('form');
+      const clear = form.querySelector('[data-clear]');
+      form.addEventListener('input', () => {
+        lastEdited = Date.now();
+        hasInput = true;
+        clear.hidden = uncertain;
+      });
+      clear.onclick = () => { if (window.confirm(t.clearPrompt)) startAgain(); };
+      if (form.elements.car) draft.car = form.elements.car.value;
+      if (form.elements.car)
+        form.elements.car.onchange = () => {
+          const previous = title(findCar(draft.car));
+          draft.car = form.elements.car.value;
+          if (kind === 'sourcing' && (!form.elements.model.value || form.elements.model.value === previous)) {
+            form.elements.model.value = title(findCar(draft.car));
+          }
+        };
+      form.elements.type.onchange = () => {
+        capture();
+        draw();
+        focusField(box.querySelector('#ins-type'));
+      };
+      function fieldErrors() {
+        capture();
+        const errors = {
+          name: draft.name ? '' : t.required,
+          reach: validContact(draft.reach) ? '' : t.reachError,
+        };
+        if (kind === 'question') errors.message = draft.message ? '' : t.required;
+        if (kind === 'viewing') {
+          errors.car = draft.car ? '' : t.requiredCar;
+          errors.date =
+            form.elements.date.validity.badInput || (draft.date && draft.date < wallTime())
+              ? t.futureDate
+              : '';
+        }
+        if (kind === 'sourcing') {
+          errors.model = draft.model ? '' : t.required;
+          for (const k of ['budget', 'mileage']) errors[k] = /^[1-9]\d*$/.test(draft[k]) ? '' : t.numberError;
+        }
+        if (kind === 'import') {
+          errors.listingUrl = draft.listingUrl.length > 2048 ? t.longLink : httpURL(draft.listingUrl) ? '' : t.urlError;
+        }
+        return errors;
+      }
+      clearFixedErrors(form, fieldErrors);
+      form.onsubmit = (e) => {
+        e.preventDefault();
+        if (!validation(form, fieldErrors())) return;
+        showPrepared();
+      };
+    }
+    if (receipt) showReceipt(receipt);
+    else if (prepared) showPrepared();
+    else draw();
+  }
+  const metricKeys = ['visits', 'views', 'whatsapp', 'phone', 'saved', 'bookings'];
+  const metricNotes = ['visitsTip', 'viewsTip', 'clicksTip', 'clicksTip', 'savedTip', 'bookedTip'];
+  const makeOwnerURL = (tab, params = {}) => {
+    const u = new URL(`/claude-cars-demo/version-c/${lang}/owner/`, location.origin);
+    u.searchParams.set('tab', tab);
+    for (const [key, value] of Object.entries(params)) if (value) u.searchParams.set(key, value);
+    return u.pathname + u.search;
+  };
+  const emptyCounts = () => Object.fromEntries(metricKeys.map(key => [key, 0]));
+  const dateLabel = new Intl.DateTimeFormat(locale, {timeZone: 'UTC', day:'numeric', month:'short', year:'numeric'});
+  const rangeLabel = (first, last) => dateLabel.format(asDay(first)) + ' – ' + dateLabel.format(asDay(last));
+  function report(data, period, carId, metric) {
+    const today = dayNumber(dateKey(Date.now()));
+    const first = period === 'all' ? -Infinity : today - Number(period) + 1;
+    const previousStart = period === 'all' ? -Infinity : first - Number(period);
+    const leads = data.leads.filter(lead => {
+      const day = dayNumber(dateKey(lead.time));
+      return (!carId || lead.car === carId) && day >= first && day <= today;
+    });
+    const counts = emptyCounts(), previous = emptyCounts(), days = {};
+    const sources = new Map(), byCar = new Map();
+    let earliest = today, firstObserved = Infinity;
+    const firstForMetric = {};
+    for (const row of data.metrics) {
+      const day = dayNumber(row.day);
+      firstObserved = Math.min(firstObserved, day);
+      const key = row.kind === 'visit' ? 'visits' : row.kind === 'view' ? 'views' : row.kind;
+      if (!Object.hasOwn(counts, key)) continue;
+      firstForMetric[key] = Math.min(firstForMetric[key] ?? Infinity, day);
+      if ((carId && row.car !== carId) || day > today) continue;
+      if (day < first) {
+        if (day >= previousStart) previous[key] += row.count;
+        continue;
+      }
+      earliest = Math.min(earliest, day);
+      counts[key] += row.count;
+      if (key === metric) days[day] = (days[day] || 0) + row.count;
+      const source = sources.get(row.source) || emptyCounts();
+      source[key] += row.count;
+      sources.set(row.source, source);
+      if (row.car) {
+        const car = byCar.get(row.car) || emptyCounts();
+        car[key] += row.count;
+        byCar.set(row.car, car);
+      }
+    }
+    return {counts, days, sources, byCar, start:period === 'all' ? earliest : first, end:today, leads,
+      previous, previousStart, firstForMetric, comparable:period !== 'all' && firstObserved <= previousStart};
+  }
+  function sourceTable(sources) {
+    if (!sources.size) return `<p>${t.noSources}</p>`;
+    const labels = {facebook:'Facebook', whatsapp:'WhatsApp', direct:t.direct, other:t.other};
+    const keys = metricKeys;
+    const rows = [...sources].sort((a,b) => b[1].visits - a[1].visits || b[1].views - a[1].views || b[1].saved - a[1].saved);
+    return `<div class="ins-table-wrap"><table class="ins-table"><thead><tr><th scope="col">${t.sourceLabel}</th>${keys.map(k => `<th scope="col">${t[k]}</th>`).join('')}</tr></thead><tbody>${rows.map(([key, counts]) => `<tr><th scope="row">${labels[key] || t.other}</th>${keys.map(k => `<td data-label="${esc(t[k])}">${integer.format(counts[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+  function metrics(r, carId) {
+    return `<dl class="ins-metrics">${metricKeys.map((key, i) => {
+      const earlier = r.firstForMetric[key] <= r.previousStart ? integer.format(r.previous[key])
+        : r.previous[key] ? `${integer.format(r.previous[key])} · ${t.partialHistory}` : t.noBaseline;
+      const compared = r.comparable ? `<small class="ins-previous">${t.previousValue} · ${esc(earlier)}</small>` : '';
+      return `<div><dt>${esc(t[key === 'visits' && carId ? 'carVisits' : key])}</dt><dd>${integer.format(r.counts[key])}${compared}<small>${t[metricNotes[i]]}</small></dd></div>`;
+    }).join('')}</dl>`;
+  }
+  function chart(r, metric) {
+    if (!r.counts[metric]) return `<div class="ins-chart-empty"><p>${metric === 'views' ? t.noViews : t.noActivity}</p></div>`;
+    const totalDays = r.end - r.start + 1;
+    const step = Math.max(1, Math.ceil(totalDays / 32));
+    const buckets = [];
+    for (let start = r.start; start <= r.end; start += step) {
+      const end = Math.min(r.end, start + step - 1);
+      let count = 0;
+      for (let d = start; d <= end; d++) count += r.days[d] || 0;
+      const labels = new Date(asDay(r.start)).getUTCFullYear() === new Date(asDay(r.end)).getUTCFullYear() ? tickFormat : dateLabel;
+      const from = labels.format(asDay(start)), to = labels.format(asDay(end));
+      const label = step === 1 ? from : `${from} – ${to}`;
+      buckets.push({ label, count });
+    }
+    const high = Math.max(1, ...buckets.map((b) => b.count));
+    return `<figure class="ins-chart"><figcaption>${step === 1 ? t.daily : t.range} <span>${t.total} ${integer.format(r.counts[metric])}</span></figcaption><div class="ins-bars" aria-hidden="true">${buckets.map((b) => `<div class="ins-bar-column" title="${esc(b.label)} · ${b.count}"><svg viewBox="0 0 1 100" preserveAspectRatio="none" focusable="false"><rect x="0" y="${100 - (b.count * 100) / high}" width="1" height="${(b.count * 100) / high}"></rect></svg></div>`).join('')}</div><div class="ins-axis"><span>${esc(buckets[0].label)}</span><span>${esc(buckets[buckets.length - 1].label)}</span></div><details><summary>${t.details}</summary><dl class="ins-chart-data">${buckets.map((b) => `<div><dt>${esc(b.label)}</dt><dd>${integer.format(b.count)}</dd></div>`).join('')}</dl></details></figure>`;
+  }
+  function stats(panel, data) {
+    const params = new URLSearchParams(location.search);
+    const period = ['7', '30', 'all'].includes(params.get('period')) ? params.get('period') : '7';
+    const carId = params.get('vehicle') || '';
+    const metric = metricKeys.includes(params.get('metric')) ? params.get('metric') : 'views';
+    const metricQuery = metric === 'views' ? {} : {metric};
+    const r = report(data, period, carId, metric),
+      car = findCar(carId);
+    const ids = Array.from(
+      new Set(
+        [
+          ...cars()
+            .filter((c) => c.status !== 'draft')
+            .map((c) => c.id),
+          ...data.metrics.map((e) => e.car),
+          ...data.leads.map((l) => l.car),
+        ].filter(Boolean),
+      ),
+    );
+    const names = new Map(), nameCounts = new Map();
+    for (const cid of ids) {
+      const name = title(findCar(cid)) || data.leads.find(l => l.car === cid && l.title)?.title || cid;
+      names.set(cid,name);
+      nameCounts.set(name,(nameCounts.get(name) || 0) + 1);
+    }
+    const carName = cid => {
+      const name = names.get(cid) || cid;
+      if (nameCounts.get(name) <= 1) return name;
+      const car = findCar(cid);
+      const details = [car?.year, car?.km != null ? integer.format(car.km) + ' km' : ''].filter(Boolean);
+      const match = ids.some(other => other !== cid && names.get(other) === name &&
+        findCar(other)?.year === car?.year && findCar(other)?.km === car?.km);
+      if (match || !details.length) details.push(cid);
+      return [name, ...details].join(' · ');
+    };
+    if (carId && !ids.includes(carId)) {
+      panel.innerHTML = `<div class="ins-dashboard"><a class="ins-back" href="${esc(makeOwnerURL('stats', { period, ...metricQuery }))}">← ${t.backStats}</a><h1>${t.stats}</h1><p class="ins-note">${t.reportUnavailable}</p></div>`;
+      return;
+    }
+    const rows = ids
+      .map((cid) => ({ id: cid, name: carName(cid), ...(r.byCar.get(cid) || emptyCounts()) }))
+      .sort((a, b) => b.views - a.views || a.name.localeCompare(b.name, locale));
+    const strip = `<div class="ins-period" role="group" aria-label="${t.period}">${[
+      ['7', 'seven'],
+      ['30', 'thirty'],
+      ['all', 'all'],
+    ]
+      .map(
+        ([v, key]) =>
+          `<a class="${v === period ? 'is-current' : ''}" ${v === period ? 'aria-current="true"' : ''} href="${esc(makeOwnerURL('stats', { period: v, vehicle: carId, ...metricQuery }))}">${t[key]}</a>`,
+      )
+      .join('')}</div>`;
+    let list = '';
+    if (!carId) {
+      const keys = ['views', 'saved', 'bookings'];
+      list = `<section class="ins-section"><h2>${t.byCar}</h2>${rows.length ? `<div class="ins-table-wrap"><table class="ins-table"><thead><tr><th scope="col">${t.car}</th>${keys.map((k) => `<th scope="col">${t[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr><th scope="row"><a href="${esc(makeOwnerURL('stats', { period, vehicle: row.id, ...metricQuery }))}">${esc(row.name)} <span aria-hidden="true">↗</span></a></th>${keys.map((k) => `<td data-label="${esc(t[k])}">${integer.format(row[k])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : `<p>${t.noCars}</p>`}</section>`;
+    } else {
+      list = `<section class="ins-section"><h2>${t.linked}</h2>${r.leads.length ? `<p>${t.inboxNote}</p><ul class="ins-linked">${r.leads.map((l) => `<li><a href="${esc(makeOwnerURL('enquiries', { lead: l.id, vehicle: carId, period, ...metricQuery }))}">${esc(l.fields.name || l.title || t[l.type])} · ${esc(t[l.type === 'manual' ? 'ownWhats' : l.type])}</a><span>${dateFormat.format(l.time)}</span></li>`).join('')}</ul>` : `<p>${t.relatedEmpty}</p>`}</section>`;
+    }
+    const range = rangeLabel(r.start,r.end);
+    const comparison = period === 'all' ? '' : r.comparable
+      ? ` · ${t.comparedWith} ${rangeLabel(r.previousStart, r.start-1)}` : ' · ' + t.historyShort;
+    const metricChoices = metricKeys.map(k => option(k, t[k === 'visits' && carId ? 'carVisits' : k], metric)).join('');
+    const kinds = ['question', 'viewing', 'sourcing', 'import', 'manual'];
+    const byType = kinds.map(kind => [kind, r.leads.filter(l => l.type === kind).length]).filter(([,count]) => count);
+    const typesBlock = `<section class="ins-section"><h2>${t.enquiryTypes}</h2><p>${t.inboxNote}</p>${byType.length
+      ? `<dl class="ins-type-totals">${byType.map(([key,count]) => `<div><dt><a href="${esc(makeOwnerURL('enquiries',{kind:key,period,vehicle:carId,from:'stats',...metricQuery}))}">${esc(t[key === 'manual' ? 'ownWhats' : key])}</a></dt><dd>${integer.format(count)}</dd></div>`).join('')}</dl>`
+      : `<p>${t.relatedEmpty}</p>`}</section>`;
+    panel.innerHTML = `<div class="ins-dashboard">${carId ? `<a class="ins-back" href="${esc(makeOwnerURL('stats', { period, ...metricQuery }))}">← ${t.backStats}</a>` : ''}<div class="ins-report-head"><div><h1>${esc(carId ? carName(carId) : t.stats)}</h1><p>${t.device}</p></div>${strip}</div><p class="ins-range">${esc(range + comparison)}<br>${t.todayOngoing}</p>${metrics(r, carId)}<section class="ins-section"><h2>${metric === 'views' ? t.trend : t.trendMetric + ' · ' + t[metric]}</h2><label class="ins-metric-choice">${t.chartMetric}<select name="metric" data-chart-metric>${metricChoices}</select></label>${chart(r, metric)}</section><section class="ins-section"><h2>${t.sources}</h2>${sourceTable(r.sources)}<p class="ins-note">${t.sourceInfo}</p></section>${typesBlock}${list}${car && car.status !== 'draft' ? `<a class="ins-back" href="${esc(carURL(carId))}">${t.openListing} ↗</a>` : ''}<div class="ins-export"><button type="button" class="ins-secondary" data-export-metrics>${t.exportFigures}</button><p>${t.exportSummary}</p></div></div>`;
+    panel.querySelector('[data-export-metrics]').addEventListener('click', () => {
+      const labels = {facebook:'Facebook', whatsapp:'WhatsApp', direct:t.direct, other:t.other};
+      const groups = new Map();
+      for (const row of data.metrics) {
+        const day = dayNumber(row.day);
+        if (day < r.start || day > r.end || carId && carId !== row.car) continue;
+        const id = [row.day, row.source, row.car].join('|');
+        const line = groups.get(id) || {day:row.day, source:row.source, car:row.car, counts:emptyCounts()};
+        const key = row.kind === 'visit' ? 'visits' : row.kind === 'view' ? 'views' : row.kind;
+        if (Object.hasOwn(line.counts,key)) line.counts[key] += row.count;
+        groups.set(id,line);
+      }
+      const lines = [[t.reportDay, t.sourceLabel, t.car, t.listingReference, ...metricKeys.map(k => t[k])]];
+      for (const line of groups.values()) lines.push([line.day, labels[line.source] || t.other, line.car ? carName(line.car) : t.general, line.car,
+        ...metricKeys.map(key => line.counts[key])]);
+      const quote = field => {
+        let value = String(field);
+        if (/^[\s]*[=+@-]/u.test(value)) value = "'" + value;
+        return '"' + value.replaceAll('"','""') + '"';
+      };
+      const file = new Blob(['\uFEFF',lines.map(line => line.map(quote).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'});
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(file);
+      const iso = day => new Date(asDay(day)).toISOString().slice(0,10);
+      link.download = `Claude-Cars_${iso(r.start)}_${iso(r.end)}.csv`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 1500);
+    });
+    panel.querySelector('[data-chart-metric]').addEventListener('change', event => {
+      const chosen = event.target.value;
+      const next = makeOwnerURL('stats',{period, vehicle:carId, metric:chosen === 'views' ? '' : chosen});
+      history.pushState({}, '', next);
+      stats(panel, data);
+      focusField(panel.querySelector('[data-chart-metric]'));
+      for (const link of document.querySelectorAll('#mast [data-cc-language]'))
+        link.href = '/claude-cars-demo/version-c/' + link.dataset.ccLanguage + '/owner/' + location.search;
+    });
+  }
+  let recentChange = null;
+  const manualStore = 'claude-cars.owner.contact.v1';
+  let manualCache = null;
+  function clearManualDraft() {
+    manualCache = null;
+    try { sessionStorage.removeItem(manualStore); } catch {}
+  }
+  function readManualDraft() {
+    try { manualCache = JSON.parse(sessionStorage.getItem(manualStore)) || manualCache; } catch {}
+    if (!manualCache?.fields || !manualCache.id || Date.now() - manualCache.time > 30*60000) clearManualDraft();
+    return manualCache;
+  }
+  function stashManual(id, fields) {
+    if (!Object.values(fields).some(Boolean)) { clearManualDraft(); return; }
+    manualCache = {id, fields, time:Date.now()};
+    try { sessionStorage.setItem(manualStore, JSON.stringify(manualCache)); } catch {}
+  }
+  function inbox(panel, data, api) {
+    const params = new URLSearchParams(location.search);
+    const selected = params.get('lead');
+    const period = ['7', '30', 'all'].includes(params.get('period')) ? params.get('period') : 'all';
+    const contextCar = params.get('vehicle');
+    const states = ['new', 'replied', 'booked'];
+    const filter = states.includes(params.get('status')) ? params.get('status') : '';
+    const kind = [...types, 'manual'].includes(params.get('kind')) ? params.get('kind') : '';
+    const fromStats = !!contextCar || params.get('from') === 'stats';
+    const metric = metricKeys.includes(params.get('metric')) ? params.get('metric') : '';
+    const sourceQuery = fromStats ? {from:'stats', period, vehicle:contextCar, metric} : {};
+    const statusQuery = {...sourceQuery, kind, status:filter};
+    const today = dayNumber(dateKey(Date.now()));
+    const inGroup = data.leads.filter(lead => {
+      if (kind && lead.type !== kind || fromStats && contextCar && lead.car !== contextCar) return false;
+      const day = dayNumber(dateKey(lead.time));
+      return !fromStats || period === 'all' || day >= today - Number(period) + 1 && day <= today;
+    });
+    const rows = selected ? data.leads.filter(lead => lead.id === selected) :
+      inGroup.filter(lead => !filter || lead.status === filter);
+    const filters = !selected && (inGroup.length > 1 || filter) ? `<nav class="ins-period ins-inbox-filters" aria-label="${t.filterStatus}">${['', ...states].map(state => {
+      const n = state ? inGroup.filter(lead => lead.status === state).length : inGroup.length;
+      const url = makeOwnerURL('enquiries', {...statusQuery, status:state});
+      return `<a href="${esc(url)}" ${filter === state ? 'class="is-current" aria-current="page"' : ''}>${state ? t[state] : t.allRequests} <span>${integer.format(n)}</span></a>`;
+    }).join('')}</nav>` : '';
+    const reportLink = fromStats ? makeOwnerURL('stats',{vehicle:contextCar, period, metric}) : '';
+    const contextLinks = selected || kind || fromStats
+      ? `<nav class="ins-return"><a class="ins-back" href="${esc(makeOwnerURL('enquiries', selected ? statusQuery : {}))}">← ${filter && selected ? t[filter] : kind && selected ? t[kind === 'manual' ? 'ownWhats' : kind] : t.allRequests}</a>${reportLink ? `<a class="ins-back" href="${esc(reportLink)}">← ${t.backReport}</a>` : ''}</nav>`
+      : '';
+    function row(lead) {
+      const status = ['booked', 'replied'].includes(lead.status) ? lead.status : 'new';
+      const leadName = lead.fields.name || lead.title || t[lead.type === 'manual' ? 'ownWhats' : lead.type];
+      const detailURL = makeOwnerURL('enquiries', { lead: lead.id, ...statusQuery });
+      const carStatsURL = makeOwnerURL('stats', { vehicle: lead.car, period, metric });
+      let reach = '';
+      if (lead.fields.reach) {
+        const contact = lead.fields.reach;
+        const destination = validContact(contact)
+          ? contact.includes('@')
+            ? 'mailto:' + encodeURIComponent(contact)
+            : 'tel:' + contact.replace(/[^+0-9]/g, '')
+          : '';
+        reach = `<div><dt>${t.reach}</dt><dd>${destination ? `<a href="${esc(destination)}">${esc(contact)}</a>` : esc(contact)}</dd></div>`;
+      }
+      const details = (detailFields[lead.type] || [])
+        .filter((key) => lead.fields[key])
+        .map((key) => {
+          const value = lead.fields[key];
+          const display =
+            key === 'listingUrl' && httpURL(value)
+              ? `<a href="${esc(value)}" target="_blank" rel="noopener noreferrer">${esc(value)} ↗</a>`
+              : esc(fieldValue(key, value));
+          return `<div class="crm-fact-text"><dt>${esc(t[detailLabels[key] || key])}</dt><dd>${display}</dd></div>`;
+        })
+        .join('');
+      const undo =
+        recentChange?.id === lead.id && recentChange.revision === lead.revision && status === recentChange.next
+          ? `<button class="ins-text-btn" type="button" data-undo="${esc(lead.id)}">${t.undo}</button>`
+          : '';
+      const reopen = selected && status !== 'new' && !undo
+        ? `<button class="ins-text-btn" type="button" data-state="new" data-lead="${esc(lead.id)}">${t.reopen}</button>` : '';
+      const car = findCar(lead.car);
+      const dossier = car?.status === 'draft' ? makeOwnerURL('edit',{car:lead.car}) : carURL(lead.car);
+      const appointment = !selected && lead.fields.date ? `<p class="ins-appointment"><strong>${t.requestedTime}</strong> · ${esc(fieldValue('date',lead.fields.date))}</p>` : '';
+      if (selected) {
+        const meta = [t[lead.type === 'manual' ? 'ownWhats' : lead.type], lead.lang?.toUpperCase(), dateFormat.format(lead.time), lead.buyerUpdatedAt ? t.buyerUpdated : ''].filter(Boolean).join(' · ');
+        const carField = lead.title ? `<div><dt>${t.car}</dt><dd>${car ? `<a href="${esc(dossier)}">${esc(lead.title)}</a>` : esc(lead.title)}</dd></div>` : '';
+        const transition = (next,label,primary) => `<button type="button" class="${primary?'ins-primary':'ins-secondary'}" data-state="${next}" data-lead="${esc(lead.id)}">${label}</button>`;
+        return `<article class="ins-lead crm-record" id="ins-lead-${esc(lead.id)}" tabindex="-1">
+          <header class="crm-identity"><div class="crm-name"><div class="crm-title-row"><h1>${esc(leadName)}</h1><span class="crm-state crm-state-${status}" aria-live="polite">${t[status]}</span></div><p>${esc(meta)}</p></div><button type="button" class="ins-secondary" data-edit-contact>${t.crmEdit}</button></header>
+          <dl class="crm-facts">${reach}${carField}${details}</dl>
+          <section class="crm-follow"><h2>${t.crmNextStep}</h2><p>${status==='new'?t.crmNext:status==='replied'?t.crmReplied:t.crmBooked}</p><div class="ins-actions">${status==='new'?transition('replied',t.markReply,true):''}${status!=='booked'?transition('booked',t.markBooked,status==='replied'):''}${undo}${reopen}</div></section>
+          <footer class="crm-controls">${lead.car?`<a href="${esc(carStatsURL)}">${t.viewStats}</a>`:''}<button type="button" class="ins-text-btn" data-delete-contact>${t.crmDelete}</button></footer>
+        </article>`;
+      }
+      return `<article class="ins-lead${selected === lead.id ? ' is-selected' : ''}" id="ins-lead-${esc(lead.id)}" tabindex="-1"><div class="ins-lead-heading"><h2>${esc(leadName)}</h2><span aria-live="polite">${t.crmStatus} · ${t[status]}</span></div><p class="ins-lead-meta">${esc([t[lead.type === 'manual' ? 'ownWhats' : lead.type], lead.lang?.toUpperCase(), dateFormat.format(lead.time), lead.buyerUpdatedAt ? t.buyerUpdated : ''].filter(Boolean).join(' · '))}</p>${lead.title ? `<p class="ins-lead-car">${car ? `<a class="ins-back" href="${esc(dossier)}">${esc(lead.title)}</a>` : esc(lead.title)}</p>` : ''}${appointment}${selected ? `<dl class="ins-lead-data">${reach}${details}</dl>` : ''}<p class="ins-appointment">${status === "new" ? t.crmNext : status === "replied" ? t.crmReplied : t.crmBooked}</p><div class="ins-actions">${selected ? '' : `<a class="ins-text-btn" href="${esc(detailURL)}">${t.crmOpen}</a>`}${status === 'new' ? `<button type="button" class="ins-secondary" data-state="replied" data-lead="${esc(lead.id)}">${t.markReply}</button>` : ''}${status !== 'booked' ? `<button type="button" class="ins-secondary" data-state="booked" data-lead="${esc(lead.id)}">${t.markBooked}</button>` : ''}${undo}${reopen}</div>${selected && lead.car ? `<a class="ins-back" href="${esc(carStatsURL)}">${t.viewStats}</a>` : ''}</article>`;
+    }
+    let stored = readManualDraft();
+    const saved = stored && data.leads.find(lead => lead.id === stored.id);
+    if (saved) { clearManualDraft(); stored = null; }
+    const valuesBefore = stored?.fields || {};
+    const manualForm = selected ? '' : `<details class="ins-manual" ${stored ? 'open' : ''}><summary>${t.manual}</summary><form data-manual novalidate><p class="ins-instruction">${stored ? t.manualResumed : t.requiredFields}</p><div class="ins-pair">${field('name', t.ownerName, valuesBefore.name || '', 'required')}${field('reach', t.reach, valuesBefore.reach || '', 'required')}</div>${carSelect(valuesBefore.car || '', 'question')}${field('note', t.note, valuesBefore.note || '', '', true)}<div class="ins-actions"><button class="ins-primary" type="submit">${t.add}</button><button class="ins-text-btn" type="button" data-forget-manual ${stored ? '' : 'hidden'}>${t.clearDraft}</button></div><p class="ins-error" data-manual-status role="status"></p></form></details>`;
+    const group = [kind && t[kind === 'manual' ? 'ownWhats' : kind], fromStats && contextCar && title(findCar(contextCar)),
+      fromStats && t[period === 'all' ? 'all' : period === '7' ? 'seven' : 'thirty']].filter(Boolean).join(' · ');
+    panel.innerHTML = `<div class="ins-dashboard">${contextLinks}${selected && rows.length ? '' : `<div class="ins-report-head"><div><h1>${selected ? t.enquiryDetail : t.crmTitle}</h1>${group ? `<p>${esc(group)}</p>` : ''}<p>${t.crmIntro}</p></div></div>`}${manualForm}${filters}<p class="ins-error" data-inbox-status role="status">${saved ? `<a href="${esc(makeOwnerURL('enquiries',{lead:saved.id}))}">${t.contactSaved} →</a>` : ''}</p><div class="ins-leads">${rows.length ? rows.map(row).join('') : `<p>${selected ? t.missingLead : filter || kind ? t.noMatching : t.noRequests}</p>`}</div></div>`;
+    const output = panel.querySelector('[data-inbox-status]');
+    const manual = panel.querySelector('[data-manual]');
+    const manualErrors = () => {
+      const f = values(manual);
+      return { name: f.name ? '' : t.required, reach: validContact(f.reach) ? '' : t.reachError };
+    };
+    if (manual) clearFixedErrors(manual, manualErrors);
+    async function refresh(focusId) {
+      await renderOwner(panel, 'enquiries', api);
+      const next = document.getElementById('ins-lead-' + focusId) || panel.querySelector('.ins-inbox-filters [aria-current]') || panel.querySelector('h1');
+      if (next?.tagName === 'H1') next.tabIndex = -1;
+      next?.focus();
+    }
+    let submitting = false;
+    const manualId = stored?.id || uid();
+    if (manual) {
+      const forget = manual.querySelector('[data-forget-manual]');
+      const saveInput = () => {
+        const fields = values(manual);
+        stashManual(manualId,fields);
+        forget.hidden = !Object.values(fields).some(Boolean);
+      };
+      manual.addEventListener('input',saveInput);
+      manual.addEventListener('change',saveInput);
+      forget.onclick = () => {
+        if (!window.confirm(t.clearPrompt)) return;
+        clearManualDraft();
+        inbox(panel,data,api);
+        panel.querySelector('.ins-manual summary').focus();
+      };
+    }
+    if (manual) manual.onsubmit = async (e) => {
+      e.preventDefault();
+      if (submitting || !validation(manual, manualErrors())) return;
+      const fields = values(manual);
+      stashManual(manualId,fields);
+      const {name, reach, car, note} = fields;
+      submitting = true;
+      const button = manual.querySelector('button[type=submit]');
+      button.disabled = true;
+      try {
+        await api('/api/owner/enquiries', 'POST', {
+          id: manualId, type: 'manual', lang, car, fields: {name, reach, note},
+        });
+        clearManualDraft();
+        location.assign(makeOwnerURL('enquiries', {lead:manualId}));
+      } catch (error) {
+        const status = manual.querySelector('[data-manual-status]');
+        if (error.message === 'session') status.textContent = window.CCOwnerLocales.t('session',lang);
+        else {
+          status.textContent = t.checkContact;
+          const retry = document.createElement('button');
+          retry.type = 'button'; retry.className = 'ins-text-btn'; retry.textContent = t.refreshInbox;
+          retry.onclick = () => location.reload();
+          status.append(' ',retry);
+        }
+      } finally {
+        submitting = false;
+        button.disabled = false;
+      }
+    };
+    const contact = selected && rows[0];
+    if (contact) {
+      const card = panel.querySelector('.ins-lead');
+      const ownerText = key => window.CCOwnerLocales.t(key,lang);
+      const edit = card.querySelector('[data-edit-contact]');
+      const remove = card.querySelector('[data-delete-contact]');
+      const endpoint = '/api/owner/enquiries/' + encodeURIComponent(contact.id);
+      edit.onclick = () => {
+        if (card.querySelector('form')) return;
+        const currentState = states.includes(contact.status) ? contact.status : 'new';
+        const statusOptions = states.map(state => `
+          <label class="crm-choice crm-state-${state}">
+            <input type="radio" name="status" value="${state}" ${state === currentState ? 'checked' : ''}>
+            ${esc(t[state])}
+          </label>`).join('');
+        card.insertAdjacentHTML('beforeend', `
+          <form class="crm-editor" data-contact-editor aria-labelledby="crm-edit-title" novalidate>
+            <h2 id="crm-edit-title">${t.crmEdit}</h2>
+            <div class="crm-editor-fields">
+              ${field('name', t.ownerName, contact.fields.name, 'required')}
+              ${field('reach', t.reach, contact.fields.reach, 'required')}
+              ${carSelect(contact.car, 'question')}
+              ${field('note', t.note, contact.fields.note || '', '', true)}
+            </div>
+            <fieldset class="crm-status-options">
+              <legend>${t.crmStatus}</legend>
+              <div class="crm-choices">${statusOptions}</div>
+            </fieldset>
+            <p role="alert" class="ins-error"></p>
+            <div class="ins-actions">
+              <button type="submit" class="ins-primary">${ownerText('save')}</button>
+              <button type="button" class="ins-secondary" data-cancel-edit>${ownerText('cancel')}</button>
+            </div>
+          </form>`);
+        const form = card.querySelector('form');
+        const editErrors = () => {
+          const {name, reach} = values(form);
+          return {name: name ? '' : t.required, reach: validContact(reach) ? '' : t.reachError};
+        };
+        clearFixedErrors(form, editErrors);
+        if (contact.car && !form.elements.car.value) form.elements.car.add(new Option(contact.title || contact.car,contact.car,true,true));
+        card.classList.add('crm-editing');
+        form.elements.name.focus();
+        form.querySelector('[data-cancel-edit]').onclick = () => {
+          form.remove(); card.classList.remove('crm-editing'); edit.focus();
+        };
+        form.onsubmit = async event => {
+          event.preventDefault();
+          const {name,reach,note,car,status} = values(form);
+          if (submitting || !validation(form, editErrors())) return;
+          submitting=true;
+          try {
+            await api(endpoint,'PUT',{revision:contact.revision,status,car,fields:{name,reach,note}});
+            await refresh(contact.id);
+          } catch (err) {form.querySelector('[role=alert]').textContent=err.message==='conflict'?t.reloadRequest:t.sendError;}
+          finally { submitting=false; }
+        };
+      };
+      remove.onclick = async () => {
+        if (submitting || !window.confirm(contact.fields.name+' — '+t.crmConfirm)) return;
+        submitting=true;
+        try {
+          await api(endpoint,'DELETE',{revision:contact.revision});
+          location.replace(makeOwnerURL('enquiries',statusQuery));
+        } catch(err) {output.textContent=err.message==='conflict'?t.reloadRequest:t.sendError;}
+        finally {submitting=false;}
+      };
+    }
+    panel.querySelectorAll('[data-state],[data-undo]').forEach((button) => {
+      button.onclick = async () => {
+        if (submitting) return;
+        const undo = !!button.dataset.undo;
+        const lead = data.leads.find((item) => item.id === (button.dataset.lead || button.dataset.undo));
+        if (!lead || (undo && recentChange?.id !== lead.id)) return;
+        const status = undo ? recentChange.previous : button.dataset.state;
+        submitting = true;
+        button.disabled = true;
+        try {
+          await api('/api/owner/enquiries/' + encodeURIComponent(lead.id), 'PUT', {status, revision: lead.revision});
+          recentChange = undo ? null : {id:lead.id, previous:lead.status, next:status, revision:lead.revision + 1};
+          await refresh(lead.id);
+        } catch (error) {
+          output.textContent = error.message === 'conflict' ? t.reloadRequest :
+            error.message === 'session' ? window.CCOwnerLocales.t('session',lang) : t.sendError;
+        } finally {
+          submitting = false;
+          button.disabled = false;
+        }
+      };
+    });
+  }
+  async function renderOwner(panel, tab, api) {
+    if (!authenticated || !panel) return;
+    const data = await api('/api/owner/enquiries');
+    if (!panel.isConnected) return;
+    if (tab === 'stats') stats(panel, data);
+    else if (tab === 'enquiries') inbox(panel, data, api);
+  }
+  window.CCInsights = { renderOwner, clearManualDraft };
+  if (page === 'contact') contactPage();
+})();

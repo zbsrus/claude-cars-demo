@@ -1,0 +1,17 @@
+.cc-owner-entry {
+  display: flex;
+  justify-content: flex-end;
+  padding-inline: 4vw;
+  background: #e7ede7;
+  color: #17473f;
+  font: 13px/1.5 system-ui, sans-serif;
+}
+.cc-owner-entry a {
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  text-underline-offset: 3px;
+}
+.cc-owner-entry a:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
+@media print { .cc-owner-entry { display: none; } }
