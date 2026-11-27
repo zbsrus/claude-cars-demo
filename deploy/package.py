@@ -17,6 +17,7 @@ def build(output):
         "deploy/README.md", "assets/fonts/eb-garamond-regular.woff2", "assets/fonts/OFL-EB-Garamond.txt",
         "assets/identity/loop.svg", "assets/identity/z3-studio.webp", "assets/identity/claude-portrait.webp",
         "assets/identity/claude-portrait-600.webp", "assets/identity/claude-cars-social.jpg",
+        "assets/identity/claude-sourcing-desk.webp", "assets/identity/claude-sourcing-desk-720.webp",
     ]
     for component in ("public", "owner", "insights", "owner-site"):
         files.extend(f"web/{component}{suffix}" for suffix in (".js", "-locales.js", ".css"))

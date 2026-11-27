@@ -163,6 +163,24 @@ class SiteContent(unittest.TestCase):
         self.assertEqual(self.request(url)[0], 404)
         self.assertEqual(self.save("home", 4, "draft", {"featured": [ident]})[0], 400)
 
+    def test_services_photo_draft_publish_and_reset(self):
+        picture = BytesIO()
+        Image.new("RGB", (10, 16), "green").save(picture, "PNG")
+        status, _, uploaded = self.request("/api/owner/media", method="POST", owner=True, mime="image/png",
+                                           value=picture.getvalue())
+        self.assertEqual(status, 201)
+        url = uploaded["url"]
+        values = {"images": {"sourcing": url}, "texts": {"fr": {"servicesPhotoAlt": "Ma photo"}}}
+        self.assertEqual(self.save("services", 0, "draft", values)[0], 200)
+        self.assertNotIn("services", self.state("/fr/")[0].get("siteContent", {}))
+        self.assertEqual(self.request(url)[0], 404)
+        self.assertEqual(self.save("services", 1, "publish", values)[0], 200)
+        self.assertEqual(self.state("/fr/")[0]["siteContent"]["services"], values)
+        self.assertEqual(self.request(url)[0], 200)
+        self.assertEqual(self.save("services", 2, "publish", {})[0], 200)
+        self.assertNotIn("services", self.state("/fr/")[0].get("siteContent", {}))
+        self.assertEqual(self.request(url)[0], 404)
+
     def test_sections_conflict_validation_and_contacts(self):
         body = {"author": "Visiteur du test", "id": "test-1", "language": "fr", "quote": "Exemple privé.",
                 "reply": "Réponse privée.", "source": "https://example.com/avis"}

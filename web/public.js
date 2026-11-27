@@ -255,10 +255,17 @@
       (controls ? inventoryToolbar("archive-items") : '') + '</header>' + inventory(list, "h3", "archive-items") + '</section>';
   }
   function services() {
-    return '<section id="services" class="cc-services" tabindex="-1" aria-labelledby="cc-services-title"><div class="cc-wrap cc-services-inner">' +
-      '<div><h2 id="cc-services-title" class="cc-section-title">' + t("services") + '</h2><p>' + t("servicesIntro") + '</p></div>' +
-      '<div class="cc-service-links">' + button(routeToForm("sourcing"), t("search"), "cc-button-line") +
-      button(routeToForm("import"), t("import"), "cc-button-line") + '</div></div></section>';
+    const intro = '<h2 id="cc-services-title" class="cc-section-title">' + t("services") + '</h2><p>' + t("servicesIntro") + '</p>';
+    const links = '<div class="cc-service-links">' + button(routeToForm("sourcing"), t("search"), "cc-button-line") +
+      button(routeToForm("import"), t("import"), "cc-button-line") + '</div>';
+    const start = '<section id="services" class="cc-services" tabindex="-1" aria-labelledby="cc-services-title"><div class="cc-wrap cc-services-inner';
+    if (page !== "home") return start + '"><div>' + intro + '</div>' + links + '</div></section>';
+    const settings = state.siteContent?.services;
+    const uploaded = settings?.images?.sourcing;
+    const figure = uploaded
+      ? '<figure class="cc-service-photo cc-service-photo-uploaded"><img loading="lazy" decoding="async" src="' + esc(uploaded) + '" alt="' + esc(settings.texts?.[lang]?.servicesPhotoAlt) + '"></figure>'
+      : '<figure class="cc-service-photo"><img loading="lazy" decoding="async" src="/assets/identity/claude-sourcing-desk.webp" srcset="/assets/identity/claude-sourcing-desk-720.webp 720w, /assets/identity/claude-sourcing-desk.webp 1440w" sizes="(min-width: 1600px) 755px, (min-width: 850px) 47vw, 92vw" width="1440" height="960" alt="' + esc(t("servicesPhotoDefaultAlt")) + '"></figure>';
+    return start + ' cc-services-feature"><div class="cc-service-copy">' + intro + links + '</div>' + figure + '</div></section>';
   }
   function beforeVisit() {
     // Use the public dossier, not a second copy of the example's condition.

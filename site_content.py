@@ -13,7 +13,7 @@ TEXT_KEYS = {
     "home": ("aboutTitle", "coverLine", "featured", "z3Credit", "z3Alt", "exploreCars"),
     "catalogue": ("current", "catalogueIntro", "archive", "noCars"),
     "profile": ("aboutTitle", "story", "selectionTitle", "selection", "claudePortrait"),
-    "services": ("services", "servicesIntro", "search", "import"),
+    "services": ("services", "servicesIntro", "search", "import", "servicesPhotoAlt"),
     "contact": ("contactPage", "contactIntro", "questionIntro", "viewingIntro",
                 "sourcingIntro", "importIntro", "byAppointment", "contactDetails"),
     "privacy": ("privacy", "privacyEnquiries", "privacyEnquiriesText", "privacySecurity",
@@ -21,7 +21,7 @@ TEXT_KEYS = {
                 "privacyRights", "privacyRightsText"),
     "reviews": (),
 }
-IMAGE_KEYS = {"home": "hero", "profile": "portrait"}
+IMAGE_KEYS = {"home": "hero", "profile": "portrait", "services": "sourcing"}
 CONTACT_LIMITS = {"phone": 40, "whatsapp": 40, "email": 254, "address": 400,
                   "facebook": 2048, "company": 400, "vat": 80}
 ACTIVE_CARS = ("available", "soon", "reserved")

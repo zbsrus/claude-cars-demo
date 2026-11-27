@@ -4,7 +4,7 @@
     home: ["aboutTitle", "coverLine", "exploreCars", "z3Credit", "z3Alt", "featured"],
     catalogue: ["current", "catalogueIntro", "archive", "noCars"],
     profile: ["aboutTitle", "story", "selectionTitle", "selection", "claudePortrait"],
-    services: ["services", "servicesIntro", "search", "import"],
+    services: ["services", "servicesIntro", "search", "import", "servicesPhotoAlt"],
     contact: ["contactPage", "contactIntro", "questionIntro", "viewingIntro", "sourcingIntro", "importIntro", "contactDetails", "byAppointment"],
     reviews: [],
     privacy: ["privacy", "privacyEnquiries", "privacyEnquiriesText", "privacySecurity", "privacySecurityText", "privacyDraft", "privacyButtons", "privacyChoiceText", "privacyRights", "privacyRightsText"]
@@ -13,7 +13,7 @@
     aboutTitle: "title", coverLine: "intro", exploreCars: "buttonText", z3Credit: "credit", z3Alt: "alternative",
     featured: "stockTitle", current: "title", catalogueIntro: "intro", archive: "archiveTitle", noCars: "emptyStock",
     story: "intro", claudePortrait: "alternative", services: "title", servicesIntro: "intro", contactPage: "title",
-    contactIntro: "intro", privacy: "title", privacyDraft: "draftPolicy"
+    contactIntro: "intro", privacy: "title", privacyDraft: "draftPolicy", servicesPhotoAlt: "sourcingPhotoAlt"
   };
   const labelledBy = {
     selectionTitle: ["title", "selectionTitle"], selection: ["text", "selectionTitle"],
@@ -32,8 +32,9 @@
   };
   const limits = {phone: 40, whatsapp: 40, email: 254, address: 400, facebook: 2048, company: 400, vat: 80,
     author: 120, quote: 2000, reply: 2000, source: 2048};
-  const originals = {hero: "/assets/identity/z3-studio.webp", portrait: "/assets/identity/claude-portrait.webp"};
-  const imageSlots = {home: "hero", profile: "portrait"};
+  const originals = {hero: "/assets/identity/z3-studio.webp", portrait: "/assets/identity/claude-portrait.webp", sourcing: "/assets/identity/claude-sourcing-desk.webp"};
+  const imageSlots = {home: "hero", profile: "portrait", services: "sourcing"};
+  const photoLabels = {hero: "photo", portrait: "portrait", sourcing: "sourcingPhoto"};
   const multiline = new Set(["coverLine", "story", "selection", "catalogueIntro", "servicesIntro", "privacyDraft",
     "quote", "reply", "address", "byAppointment", "noCars"]);
   const esc = raw => String(raw ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"}[c]));
@@ -153,10 +154,13 @@
         textInput(`texts.${language}.${key}`, label(key), display(key), key, {lang: language})).join(""), w("defaultHint"), "copy");
     }
     function imageFields() {
-      const photoTitle = w(slot === "hero" ? "photo" : "portrait");
-      return block(photoTitle, `<div class="os-image-box ${slot}"><img src="${esc(imageValue(values, slot))}" alt="${esc(display(slot === "hero" ? "z3Alt" : "claudePortrait"))}"></div>
+      return block(w(photoLabels[slot]), `<div class="os-image-box ${slot}"><img src="${esc(imageValue(values, slot))}" alt="${esc(imageDescription())}"></div>
         <div class="ow-field"><label class="ow-btn os-file" for="os-image"><span>${esc(w("photoChoose"))}</span><input id="os-image" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="os-file-hint"></label><small id="os-file-hint">${esc(w("fileHint"))}</small></div>
-        ${values.images?.[slot] ? button("reset-image", w("photoReset")) : ""}`, "", "image");
+        ${values.images?.[slot] ? button("reset-image", w("photoReset")) : ""}`, slot === "sourcing" ? w("sourcingPhotoHint") : "", "image");
+    }
+    function imageDescription() {
+      if (slot === "sourcing") return display(values.images?.[slot] ? "servicesPhotoAlt" : "servicesPhotoDefaultAlt");
+      return display(slot === "hero" ? "z3Alt" : "claudePortrait");
     }
     function featuredFields() {
       const pinned = values.featured || [];
@@ -212,7 +216,7 @@
       const action = key => `<span class="os-preview-action">${content(key)}</span>`;
       const hero = section === "home";
       const parts = [];
-      if (slot) {
+      if (hero || section === "profile") {
         parts.push(`<h2>${content("aboutTitle")}</h2><figure class="${slot}"><img src="${esc(imageValue(values, slot))}" alt="${content(hero ? "z3Alt" : "claudePortrait")}">${hero ? `<figcaption>${content("z3Credit")}</figcaption>` : ""}</figure>`);
         if (hero) {
           const order = (values.featured || []).map(id => visibleCars.find(c => c.id === id)).filter(Boolean);
@@ -223,7 +227,8 @@
         const sold = cars.filter(c => c.status === "sold");
         parts.push(`<h2>${content("current")}</h2>`, p("catalogueIntro"), visibleCars.length ? previewCards(visibleCars) : p("noCars"), sold.length ? h("archive") + previewCards(sold) : "");
       } else if (section === "services") {
-        parts.push(`<h2>${content("services")}</h2>`, p("servicesIntro"), action("search"), action("import"));
+        parts.push(`<h2>${content("services")}</h2>`, p("servicesIntro"), action("search"), action("import"),
+          `<figure class="sourcing"><img src="${esc(imageValue(values, slot))}" alt="${esc(imageDescription())}"></figure>`);
       } else if (section === "contact") {
         parts.push(`<h2>${content("contactPage")}</h2>`, p("contactIntro"));
         for (const type of ["question", "viewing", "sourcing", "import"]) {
@@ -255,7 +260,7 @@
       for (const code of languages) for (const key of sections[section]) {
         add(`${window.CCOwnerLocales.names[code]} · ${label(key)}`, effectiveText(section, theirs, key, code), effectiveText(section, values, key, code));
       }
-      if (slot) add(w(slot === "hero" ? "photo" : "portrait"), imageValue(theirs, slot), imageValue(values, slot), true);
+      if (slot) add(w(photoLabels[slot]), imageValue(theirs, slot), imageValue(values, slot), true);
       if (section === "home") {
         const names = v => (v.featured || []).map(id => vehicle(id) ? carName(vehicle(id)) : id).join("\n");
         add(w("stock"), names(theirs), names(values));
