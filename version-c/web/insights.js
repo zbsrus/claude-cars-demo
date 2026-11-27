@@ -31,7 +31,7 @@
   const title = (car) => [car?.make, car?.model].filter(Boolean).join(' ');
   const findCar = (carId) => cars().find((c) => c.id === carId);
   const canViewCar = (car) => car?.status === 'available';
-  const carURL = (car) => `${location.origin}/claude-cars-demo/version-c/${lang}/cars/${encodeURIComponent(car)}`;
+  const carURL = (car) => location.origin + window.CCDemo.carPath(car,lang);
   const waURL = (message) => `https://wa.me/32496807976?text=${encodeURIComponent(message)}`;
   const dateKey = (time) => dayFormat.format(time);
   const dayNumber = (key) => Math.floor(Date.parse(key + 'T00:00:00Z') / 86400000);
@@ -442,7 +442,7 @@
   const metricKeys = ['visits', 'views', 'whatsapp', 'phone', 'saved', 'bookings'];
   const metricNotes = ['visitsTip', 'viewsTip', 'clicksTip', 'clicksTip', 'savedTip', 'bookedTip'];
   const makeOwnerURL = (tab, params = {}) => {
-    const u = new URL(`/claude-cars-demo/version-c/${lang}/owner`, location.origin);
+    const u = new URL(`/claude-cars-demo/version-c/${lang}/owner/`, location.origin);
     u.searchParams.set('tab', tab);
     for (const [key, value] of Object.entries(params)) if (value) u.searchParams.set(key, value);
     return u.pathname + u.search;
@@ -626,7 +626,7 @@
       stats(panel, data);
       focusField(panel.querySelector('[data-chart-metric]'));
       for (const link of document.querySelectorAll('#mast [data-cc-language]'))
-        link.href = '/' + link.dataset.ccLanguage + '/owner' + location.search;
+        link.href = '/claude-cars-demo/version-c/' + link.dataset.ccLanguage + '/owner/' + location.search;
     });
   }
   let recentChange = null;

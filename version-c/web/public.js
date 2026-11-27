@@ -10,7 +10,7 @@
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[c]);
   const path = (suffix = "") => "/claude-cars-demo/version-c/" + lang + "/" + suffix + (suffix && !suffix.startsWith("#") ? "/" : "");
-  const carPath = (car) => path("cars/" + encodeURIComponent(car.id));
+  const carPath = (car) => window.CCDemo.carPath(car.id,lang);
   const carName = (car) => [car.make, car.model].filter(Boolean).join(" ");
   const firstPhoto = (car) => car.cover || car.photos?.find(Boolean) || "";
   const active = ["available", "soon", "reserved"].flatMap(status => cars.filter(car => car.status === status));
@@ -137,6 +137,7 @@
       '<div class="cc-wrap cc-foot-legal">Claude C SRL · BE 0681.982.155</div>';
   }
   function photo(src, alt, className = "", highPriority = false, sizes = "100vw") {
+    if(src?.startsWith("/media/demo-")) return '<img class="' + esc(className) + '" src="' + esc(window.CCDemo.asset(src)) + '" alt="' + esc(alt) + '" decoding="async">';
     let url;
     try { url = new URL(src, location.origin); } catch { return ""; }
     if (!src || url.origin !== location.origin || !["http:", "https:"].includes(url.protocol)) return "";
@@ -263,7 +264,7 @@
     const settings = state.siteContent?.services;
     const uploaded = settings?.images?.sourcing;
     const figure = uploaded
-      ? '<figure class="cc-service-photo cc-service-photo-uploaded"><img loading="lazy" decoding="async" src="' + esc(uploaded) + '" alt="' + esc(settings.texts?.[lang]?.servicesPhotoAlt) + '"></figure>'
+      ? '<figure class="cc-service-photo cc-service-photo-uploaded"><img loading="lazy" decoding="async" src="' + esc(window.CCDemo.asset(uploaded)) + '" alt="' + esc(settings.texts?.[lang]?.servicesPhotoAlt) + '"></figure>'
       : '<figure class="cc-service-photo"><img loading="lazy" decoding="async" src="/claude-cars-demo/version-c/assets/identity/claude-sourcing-desk.webp" srcset="/claude-cars-demo/version-c/assets/identity/claude-sourcing-desk-720.webp 720w, /claude-cars-demo/version-c/assets/identity/claude-sourcing-desk.webp 1440w" sizes="(min-width: 1600px) 755px, (min-width: 850px) 47vw, 92vw" width="1440" height="960" alt="' + esc(t("servicesPhotoDefaultAlt")) + '"></figure>';
     return start + ' cc-services-feature"><div class="cc-service-copy">' + intro + links + '</div>' + figure + '</div></section>';
   }
@@ -394,7 +395,7 @@
       '<button type="button" data-cc-thumb="' + i + '" aria-label="' + esc(t("photo") + " " + (i+1) + " · " + caption(car,src,i)) +
       '" aria-pressed="' + (i === 0) + '">' + photo(src, "", "", false, "90px") + '</button>').join("") + '</div>' : "";
     const video = car.video && /^\/(?!\/)/.test(car.video) ? '<video class="cc-film" controls playsinline preload="none" aria-label="' + esc(t("video") + " · " + carName(car)) +
-      '" src="' + esc(car.video) + '"></video>' : "";
+      '" src="' + esc(window.CCDemo.asset(car.video)) + '"></video>' : "";
     if (!main) return video || '<div class="cc-gallery-image cc-photo-stage"><span>' + t("photosPending") + '</span></div>';
     return '<div class="cc-gallery"><div class="cc-gallery-frame"><button type="button" class="cc-gallery-photo" data-cc-enlarge aria-label="' + t("full") + '"><span class="cc-gallery-image cc-photo-stage">' +
       photo(main,carName(car) + " · " + caption(car,main),"",true, "(max-width: 849px) 100vw, 58vw") + '</span><span class="cc-zoom">' + icon("zoom") + t("full") + '</span></button>' + controls + '</div>' +
