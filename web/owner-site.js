@@ -413,6 +413,19 @@
       } catch (err) { if (isCurrent()) setMessage(t(err.message) || t("failure"), true); }
       finally { if (isCurrent()) locked(false); }
     }
+    function changeImage(url) {
+      if (slot === "sourcing" && url !== values.images?.[slot] && values.texts) {
+        for (const code of languages) {
+          const fields = values.texts[code];
+          if (!fields) continue;
+          delete fields.servicesPhotoAlt;
+          if (!Object.keys(fields).length) delete values.texts[code];
+        }
+        if (!Object.keys(values.texts).length) delete values.texts;
+      }
+      if (url) values.images = {[slot]: url};
+      else delete values.images;
+    }
     async function upload(file) {
       if (!file || busy) return;
       if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 20 * 1024 * 1024 || !file.size) {
@@ -423,7 +436,7 @@
       try {
         const result = await api("/api/owner/media", "POST", file, true);
         if (!isCurrent()) return;
-        values.images = {[slot]: result.url};
+        changeImage(result.url);
         message = ""; error = false;
         draw();
       } catch (err) {
@@ -496,7 +509,7 @@
           confirmation = ""; message = ""; error = false; draw('[data-site-action="add-review"]');
         } else commit(confirmation);
       } else if (action === "reset-image") {
-        delete values.images; message = ""; error = false; draw("#os-image");
+        changeImage(); message = ""; error = false; draw("#os-image");
       } else if (action === "reload-inbox") {
         locked(true);
         await loadInbox();
