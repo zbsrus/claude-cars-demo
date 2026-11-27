@@ -326,14 +326,19 @@
       directWhats.hidden = true;
       const request = lead();
       const msg = buildMessage(request);
+      const buttonLabel = () => attemptedVersion === submission.version ? t.retrySend :
+        uncertain ? t.sendCorrection : t.siteSend;
+      const recoveryNote = attemptedVersion === submission.version ? t.deliveryUncertain : t.correctionNote;
       box.innerHTML = `<h2 tabindex="-1">${t.prepared}</h2><div class="ins-message">${esc(msg)}</div>
-        <p class="ins-note">${esc(window.CCPages.prepare)} ${esc(window.CCLegal.get("whatsapp", lang))} <a href="/claude-cars-demo/version-c/${lang}/privacy/" target="_blank" rel="noopener">${t.privacy}</a></p>
-        <p class="ins-error" role="alert"></p>
-        <div class="ins-actions"><a class="ins-primary" href="mailto:${esc(email)}?subject=${encodeURIComponent(t[request.type])}&amp;body=${encodeURIComponent(msg)}">${esc(window.CCPages.email)}</a>
+        <p class="ins-note">${t.handoff} <a href="/claude-cars-demo/version-c/${lang}/privacy/" target="_blank" rel="noopener">${t.privacy}</a></p>
+        <p class="ins-error" role="alert">${uncertain ? recoveryNote : ''}</p>
+        <div class="ins-actions"><button type="button" class="ins-primary" data-send>${buttonLabel()}</button>
         <a class="ins-secondary" data-cc-event="whatsapp" data-cc-car="${esc(request.car)}" target="_blank" rel="noopener noreferrer" href="${esc(waURL(msg))}">${t.openWhats} ↗</a>
         <button type="button" data-edit class="ins-text-btn">${t.edit}</button>
         <button type="button" data-refresh-stock class="ins-secondary" hidden>${t.refreshStock}</button></div>`;
+      const send = box.querySelector('[data-send]');
       const edit = box.querySelector('[data-edit]');
+      const alert = box.querySelector('[role="alert"]');
       const refreshStock = box.querySelector('[data-refresh-stock]');
       refreshStock.onclick = () => {
         prepared = false;
@@ -349,6 +354,7 @@
         draw();
         focusField(box.querySelector('#ins-date') || box.querySelector('select'));
       };
+      send.onclick = () => { alert.textContent = window.CCPreviewSubmit; };
       box.querySelector('h2').focus();
     }
     function draw() {
@@ -372,7 +378,7 @@
       ${kind === 'import' ? field('listingUrl', t.listingUrl, draft.listingUrl, 'type="url" inputmode="url" spellcheck="false" required') : ''}
       ${field('message', kind === 'question' ? t.message : t.messageOpt, draft.message, kind === 'question' ? 'required' : '', true)}
       <div class="ins-pair">${field('name', t.name, draft.name, 'autocomplete="name" required')}${field('reach', t.reach, draft.reach, 'autocomplete="on" spellcheck="false" required')}</div>
-      <p class="ins-note ins-before-review">${esc(window.CCPages.prepare)} <a href="/claude-cars-demo/version-c/${lang}/privacy/" target="_blank" rel="noopener">${t.privacy}</a></p>
+      <p class="ins-note ins-before-review">${t.formHandoff} <a href="/claude-cars-demo/version-c/${lang}/privacy/" target="_blank" rel="noopener">${t.privacy}</a></p>
       <div class="ins-actions"><button class="ins-primary" type="submit">${t.prepare} <span aria-hidden="true">→</span></button><button type="button" class="ins-text-btn" data-clear ${hasInput && !uncertain ? '' : 'hidden'}>${t.clearDraft}</button></div></form>`;
       const form = box.querySelector('form');
       const clear = form.querySelector('[data-clear]');

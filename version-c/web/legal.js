@@ -42,8 +42,39 @@
       "Your preferred car layout stays in this browser until you clear it.",
       "La vista que elijas para los coches permanece en este navegador hasta que borres esos datos."
     ),
+    demoTitle: words("Confidentialité de la démo", "Privacy van de demo", "Datenschutz der Demo", "Demo privacy", "Privacidad de la demo"),
+    demoFormsTitle: words("Demandes et avis", "Aanvragen en beoordelingen", "Anfragen und Bewertungen", "Enquiries and reviews", "Consultas y reseñas"),
+    demoScope: words(
+      "Cette version sert uniquement à essayer le site. Le cabinet simule une connexion. Aucun compte réel n’est ouvert.",
+      "Deze versie is alleen bedoeld om de site uit te proberen. De werkruimte simuleert een aanmelding. Er wordt geen echt account geopend.",
+      "Diese Version dient nur zum Ausprobieren. Der interne Bereich simuliert die Anmeldung. Es wird kein echtes Konto geöffnet.",
+      "This version is for trying out the site. The workspace simulates signing in. It does not open a real account.",
+      "Esta versión solo sirve para probar el sitio. El espacio de trabajo simula el acceso. No se abre ninguna cuenta real."
+    ),
+    demoForms: words(
+      "Utilisez uniquement des données fictives. Les demandes et avis de démonstration ne sont pas envoyés à Claude ni publiés.",
+      "Gebruik alleen fictieve gegevens. Aanvragen en beoordelingen in de demo worden niet naar Claude verstuurd of gepubliceerd.",
+      "Verwenden Sie nur erfundene Daten. Anfragen und Bewertungen in der Demo werden weder an Claude gesendet noch veröffentlicht.",
+      "Use fictional details only. Demo enquiries and reviews are not sent to Claude or published.",
+      "Usa solo datos ficticios. Las consultas y reseñas de la demo no se envían a Claude ni se publican."
+    ),
+    demoStore: words(
+      "Le navigateur peut garder le brouillon de demande dans l’onglet. Les changements dans le cabinet de démonstration restent dans ce navigateur. Effacez les données du site dans votre navigateur pour les retirer.",
+      "De browser kan een conceptaanvraag in het tabblad bewaren. Wijzigingen in de demo-werkruimte blijven in deze browser. Wis de sitegegevens in uw browser om ze te verwijderen.",
+      "Der Browser kann einen Anfrageentwurf im Tab speichern. Änderungen im Demo-Bereich bleiben in diesem Browser. Löschen Sie die Websitedaten im Browser, um sie zu entfernen.",
+      "The browser can keep your enquiry draft in the tab. Any changes you make in the demo workspace stay in this browser. Clear the site data in your browser to remove them.",
+      "El navegador puede conservar el borrador de la consulta en la pestaña. Los cambios del espacio de trabajo de la demo quedan en este navegador. Borra los datos del sitio en tu navegador para eliminarlos."
+    ),
+    demoHosting: words(
+      "Quand cette démo est hébergée sur GitHub Pages, GitHub journalise l’adresse IP des visiteurs pour la sécurité.",
+      "Als deze demo op GitHub Pages wordt gehost, registreert GitHub de IP-adressen van bezoekers voor de beveiliging.",
+      "Wird diese Demo auf GitHub Pages gehostet, protokolliert GitHub die IP-Adressen der Besucher zu Sicherheitszwecken.",
+      "When this demo is hosted on GitHub Pages, GitHub logs visitors’ IP addresses for security.",
+      "Cuando esta demo está alojada en GitHub Pages, GitHub registra las direcciones IP de los visitantes por motivos de seguridad."
+    )
   };
   const authority = "https://www.autoriteprotectiondonnees.be/citoyen/agir/introduire-une-plainte";
+  const github = "https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages#data-collection";
   const whatsapp = "https://www.whatsapp.com/legal/privacy-policy-eea";
   const baseBusiness = {company:"Claude C SRL", enterprise:"0681.982.155", vat:"BE 0681.982.155",
     email:"mcsportcars17@gmail.com", phone:"+32 496 80 79 76"};
@@ -53,8 +84,9 @@
   }
   function render({state, path, esc}) {
     const {lang, page} = state;
+    const demo = Boolean(window.CCDemo);
     const editorial = state.siteContent?.privacy?.texts?.[lang] || {};
-    const t = key => esc(get(key, lang) || editorial[key] || window.CCPublicWords[key]?.[lang] || "");
+    const t = key => esc(get(key, lang) || (!demo && editorial[key]) || window.CCPublicWords[key]?.[lang] || "");
     const org = business(state);
     const link = (url, label) => '<a href="' + esc(url) + '">' + label + '</a>';
     const mail = () => link("mailto:" + org.email, esc(org.email));
@@ -63,7 +95,12 @@
     const entry = (key, value) => '<div><dt>' + t(key) + '</dt><dd>' + value + '</dd></div>';
     const isLegal = page === "legal";
     let body;
-    if (isLegal) {
+    if (demo) {
+      body = isLegal ? section("operator", p(t("demoScope")) + p(link(path("privacy"), t("demoTitle")))) :
+        p(t("demoScope")) + section("demoFormsTitle", p(t("demoForms")), "review-privacy") +
+        section("storage", p(t("demoStore")) + p(t("layout"))) +
+        section("privacySecurity", p(t("demoHosting")) + p(link(github, "GitHub Pages")));
+    } else if (isLegal) {
       body = section("operator", '<dl class="cc-legal-facts">' +
         entry("company", esc(org.company)) + entry("seat", esc(org.address).replace(/\r?\n/g, "<br>")) +
         entry("enterprise", esc(org.enterprise)) + entry("vat", esc(org.vat)) +
@@ -71,15 +108,17 @@
         p(t("visit")) + p(link(path("privacy"), t("privacy"))));
     } else {
       body = section("controller", p(esc(org.company) + " · " + mail()) + p(link(path("legal"), t("legal")))) +
-        section("privacyEnquiries", p(esc(window.CCPages.enquiry))) +
-        section("reviewTitle", p(esc(window.CCPages.review)), "review-privacy") +
+        section("privacyEnquiries", p(t("privacyEnquiriesText"))) +
+        section("reviewTitle", p(t("feedbackPrivacy")), "review-privacy") +
         section("recipients", p(t("recipientsText")) + p(t("whatsapp")) + p(link(whatsapp, t("whatsappPolicy")))) +
-        section("privacySecurity", p(esc(window.CCPages.security))) +
+        section("privacySecurity", p(t("privacySecurityText"))) +
         section("storage", p(t("privacyDraft")) + p(t("layout"))) +
+        section("privacyButtons", '<label class="cc-choice"><input type="checkbox" id="cc-count-buttons">' + t("privacyCount") +
+          '</label>' + p(t("privacyChoiceText"))) +
         section("privacyRights", p(t("privacyRightsText")) + p(link(authority, t("privacyAuthority"))));
     }
     return '<article class="cc-privacy"><header class="cc-privacy-cover"><div class="cc-wrap cc-policy-title"><h1>' +
-      t(isLegal ? "legal" : "privacy") + '</h1></div></header><div class="cc-wrap cc-privacy-copy">' + body + '</div></article>';
+      t(isLegal ? "legal" : demo ? "demoTitle" : "privacy") + '</h1></div></header><div class="cc-wrap cc-privacy-copy">' + body + '</div></article>';
   }
   window.CCLegal = {get, render, business};
 })();

@@ -138,7 +138,7 @@
       '<p>' + t("location") + '</p></div><div class="cc-foot-links">' +
       navLinks([["cars","cars"],serviceRoute,["about","about"],["contact","contact"]]) + '</div><div class="cc-foot-links"><p>' + t("appointment") + '</p>' +
       navLinks([["privacy","privacy"],["legal","legal"]]) + '</div></div>' +
-      '<div class="cc-wrap cc-foot-legal">' + esc(company + " · " + vat) + '</div>';
+      '<div class="cc-wrap cc-foot-legal">' + (window.CCDemo ? t("demoTitle") : esc(company + " · " + vat)) + '</div>';
   }
   function photo(src, alt, className = "", highPriority = false, sizes = "100vw") {
     let url;
@@ -310,11 +310,11 @@
     const ratings = [1, 2, 3, 4, 5].map(score =>
       '<label><input type="radio" name="rating" value="' + score + '" required aria-label="' + score + '/5">' + star + '</label>').join("");
     return '<section id="feedback" class="cc-feedback" tabindex="-1" aria-labelledby="cc-feedback-title"><div class="cc-wrap cc-feedback-inner">' +
-      '<div><h2 id="cc-feedback-title" class="cc-section-title">' + t("feedbackTitle") + '</h2><p class="cc-prose">' + esc(window.CCPages.review) + '</p></div>' +
+      '<div><h2 id="cc-feedback-title" class="cc-section-title">' + t("feedbackTitle") + '</h2><p class="cc-prose">' + t("feedbackIntro") + '</p></div>' +
       '<div><form class="cc-feedback-form"><fieldset><legend>' + t("feedbackRating") + '</legend><div class="cc-feedback-stars">' + ratings + '</div></fieldset>' +
       '<label for="cc-feedback-comment">' + t("feedbackComment") + '</label><textarea id="cc-feedback-comment" name="comment" rows="3" maxlength="500" aria-describedby="cc-feedback-hint" placeholder="' + esc(t("feedbackPrompt")) + '"></textarea>' +
       '<p id="cc-feedback-hint" class="cc-feedback-hint">' + t("feedbackNoDetails") + '</p><label class="cc-feedback-permission" hidden><input type="checkbox" name="permission"> <span>' + t("feedbackPermission") + '</span></label>' +
-      '<button type="submit" class="cc-button">' + esc(window.CCPages.email) + '</button><a class="cc-text-link cc-feedback-privacy" href="' + path("privacy") + '#review-privacy">' + t("privacy") + '</a></form>' +
+      '<button type="submit" class="cc-button">' + t("feedbackSend") + '</button><a class="cc-text-link cc-feedback-privacy" href="' + path("privacy") + '#review-privacy">' + t("privacy") + '</a></form>' +
       '<p class="cc-feedback-message" role="status" tabindex="-1"></p></div></div></section>';
   }
   function bindFeedback() {
@@ -322,6 +322,7 @@
     if (!form) return;
     const {comment, permission} = form.elements;
     const consent = permission.closest("label");
+    const message = form.parentElement.querySelector(".cc-feedback-message");
     const sync = () => {
       consent.hidden = !comment.value.trim();
       if (consent.hidden) permission.checked = false;
@@ -330,10 +331,8 @@
     sync();
     form.addEventListener("submit", event => {
       event.preventDefault();
-      const review = [form.elements.rating.value + "/5", comment.value.trim(),
-        window.CCPages.permission + " — " + (permission.checked ? window.CCPages.yes : window.CCPages.no)].filter(Boolean).join("\n");
-      const {email} = window.CCLegal.business(window.CC);
-      location.href = "mailto:" + email + "?subject=" + encodeURIComponent(t("feedbackTitle")) + "&body=" + encodeURIComponent(review);
+      message.textContent = window.CCPreviewSubmit;
+      message.focus();
     });
   }
   function home() {
